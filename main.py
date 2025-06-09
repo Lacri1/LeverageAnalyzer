@@ -1,3 +1,5 @@
+import os
+import logging
 from flask import Flask, render_template, jsonify, request
 import numpy as np
 import pandas as pd
@@ -7,6 +9,26 @@ import json
 from datetime import datetime
 from tensorflow.keras.models import load_model
 import yfinance as yf
+
+# TensorFlow 로깅 레벨 조정
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
+tf.get_logger().setLevel('ERROR')
+tf.autograph.set_verbosity(1)
+
+# Flask 앱 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# yfinance 로깅 비활성화
+yf_logger = logging.getLogger('yfinance')
+yf_logger.setLevel(logging.WARNING)
+
+# TensorFlow 로깅 비활성화
+tf_logger = logging.getLogger('tensorflow')
+tf_logger.setLevel(logging.ERROR)
 
 # NaN을 JSON에서 처리하기 위한 커스텀 JSON 인코더
 class CustomJSONEncoder(json.JSONEncoder):
@@ -194,23 +216,22 @@ def test_endpoint():
 @app.route('/api/analyze', methods=['GET'])
 def analyze():
     try:
-        print("\n" + "="*50)
-        print(f"[{datetime.now().isoformat()}] API 요청 수신")
-        print(f"요청 파라미터: {request.args}")
-        print(f"요청 헤더: {dict(request.headers)}")
-        print("-"*50)
+        logger.info("="*50)
+        logger.info("API 요청 수신")
+        logger.debug(f"요청 파라미터: {request.args}")
+        logger.debug(f"요청 헤더: {dict(request.headers)}")
         
         # Check if models are loaded
         if model is None or scaler is None:
             error_msg = "모델이 제대로 로드되지 않았습니다. 서버 로그를 확인해주세요."
-            print(f"에러: {error_msg}")
+            logger.error(error_msg)
             return jsonify({'error': error_msg}), 500
             
         # Get date parameters
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
         
-        print(f"요청된 기간: {start_date_str} ~ {end_date_str}")
+        logger.info(f"요청된 기간: {start_date_str} ~ {end_date_str}")
         
         # Validate parameters
         if not start_date_str or not end_date_str:
@@ -224,38 +245,35 @@ def analyze():
             
             if start_date > end_date:
                 error_msg = f"시작일은 종료일보다 이전이어야 합니다. {start_date_str} > {end_date_str}"
-                print(f"에러: {error_msg}")
+                logger.error(error_msg)
                 return jsonify({'error': error_msg}), 400
                 
         except ValueError as e:
             error_msg = f"날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요. 오류: {str(e)}"
-            print(f"에러: {error_msg}")
+            logger.error(error_msg)
             return jsonify({'error': error_msg}), 400
             
-        print(f"파싱된 기간: {start_date} ~ {end_date}")
+        logger.debug(f"파싱된 기간: {start_date} ~ {end_date}")
         
         # Add buffer for sequence length
         fetch_start_date = start_date - pd.Timedelta(weeks=4)
         fetch_end_date = end_date + pd.Timedelta(days=1)
-        print(f"데이터 요청 기간 (버퍼 포함): {fetch_start_date} ~ {fetch_end_date}")
+        logger.debug(f"데이터 요청 기간 (버퍼 포함): {fetch_start_date} ~ {fetch_end_date}")
         
         # Download data
         tickers = ["QQQ", "TQQQ", "^VIX", "^IRX", "^TNX"]
-        print(f"\n=== yfinance 데이터 다운로드 시작 ===")
-        print(f"티커: {tickers}")
-        print(f"기간: {fetch_start_date.date()} ~ {fetch_end_date.date()}")
+        logger.info(f"데이터 다운로드 시작: {tickers} ({fetch_start_date.date()} ~ {fetch_end_date.date()})")
         
-        data = yf.download(tickers, start=fetch_start_date, end=fetch_end_date)
+        data = yf.download(tickers, start=fetch_start_date, end=fetch_end_date, progress=False)
         
         if data is None or data.empty:
             error_msg = "yfinance에서 데이터를 가져오지 못했습니다. 인터넷 연결을 확인해주세요."
-            print(f"에러: {error_msg}")
+            logger.error(error_msg)
             return jsonify({'error': error_msg}), 500
             
-        print(f"\n=== 다운로드 완료 ===")
-        print(f"수신된 데이터 포인트 수: {len(data)}")
-        print(f"데이터 열: {data.columns.tolist()}")
-        print(f"첫 2개 행:\n{data.head(2).to_string()}")
+        logger.info(f"데이터 다운로드 완료 - 수신된 포인트 수: {len(data)}")
+        logger.debug(f"데이터 열: {data.columns.tolist()}")
+        logger.debug(f"데이터 샘플:\n{data.head(2).to_string()}")
         
         # Rest of your existing code...
         
@@ -263,16 +281,16 @@ def analyze():
         if not start_date_str or not end_date_str:
             end_date = datetime.now()
             start_date = end_date - pd.DateOffset(years=2)
-            print(f"날짜 파라미터가 없어 기본값 사용: {start_date.date()} ~ {end_date.date()}")
+            logger.info(f"날짜 파라미터가 없어 기본값 사용: {start_date.date()} ~ {end_date.date()}")
         else:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
                 # 종료일에 하루를 더해 해당 일자까지 포함하도록 함
                 end_date = end_date + pd.Timedelta(days=1)
-                print(f"사용자 지정 날짜 범위: {start_date.date()} ~ {end_date.date()}")
+                logger.info(f"사용자 지정 날짜 범위: {start_date.date()} ~ {end_date.date()}")
             except Exception as e:
-                print(f"날짜 파싱 오류: {e}, 기본값으로 대체")
+                logger.warning(f"날짜 파싱 오류: {e}, 기본값으로 대체")
                 end_date = datetime.now()
                 start_date = end_date - pd.DateOffset(years=2)
         
@@ -282,20 +300,19 @@ def analyze():
         
         # 시퀀스 생성을 위해 시작일에서 시퀀스 길이 + 여유분(2주)을 더한 데이터를 가져옴
         fetch_start_date = start_date - pd.Timedelta(weeks=4)
-        print(f"데이터 요청 범위: {fetch_start_date.date()} ~ {end_date.date()} (시퀀스 길이 {seq_length}일 + 여유분 고려)")
+        logger.debug(f"데이터 요청 범위: {fetch_start_date.date()} ~ {end_date.date()} (시퀀스 길이 {seq_length}일 + 여유분 고려)")
         
         tickers = ["QQQ", "TQQQ", "^VIX", "^IRX", "^TNX"]
 
-        print(f"yfinance 데이터 다운로드 시작: {tickers}, {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-        print(f"yfinance 다운로드 시작: {tickers} ({start_date} ~ {end_date})")
-        data = yf.download(tickers, start=start_date, end=end_date)
-        print(f"yfinance 다운로드 완료. 수신된 데이터 포인트 수: {len(data) if data is not None else 0}")
+        logger.info(f"yfinance 데이터 다운로드 시작: {tickers}, {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        data = yf.download(tickers, start=start_date, end=end_date, progress=False)
+        logger.info(f"yfinance 다운로드 완료. 수신된 데이터 포인트 수: {len(data) if data is not None else 0}")
         
         if data is None or data.empty:
             raise ValueError("yfinance에서 데이터를 가져오지 못했습니다.")
             
-        print(f"다운로드된 데이터 열: {data.columns.tolist()}")
-        print(f"데이터 샘플:\n{data.head(2)}")
+        logger.debug(f"다운로드된 데이터 열: {data.columns.tolist()}")
+        logger.debug(f"데이터 샘플:\n{data.head(2)}")
 
         # 멀티레벨 컬럼을 단일 레벨로 변환하고 필요한 컬럼 이름으로 변경
         # 예: ('QQQ', 'Close') -> 'QQQ_Close'
@@ -323,8 +340,8 @@ def analyze():
         if df.empty:
             raise ValueError(f"No data available for the selected date range: {requested_start.date()} to {requested_end.date()}")
             
-        print(f"다운로드된 데이터 범위: {df.index[0].date()} ~ {df.index[-1].date()}")
-        print(f"요청된 분석 기간: {requested_start.date()} ~ {requested_end.date()}")
+        logger.info(f"다운로드된 데이터 범위: {df.index[0].date()} ~ {df.index[-1].date()}")
+        logger.debug(f"요청된 분석 기간: {requested_start.date()} ~ {requested_end.date()}")
         
         df = create_features(df)
 
@@ -346,7 +363,7 @@ def analyze():
             return jsonify({'error': '시퀀스 준비 중 오류 발생'}), 500
 
         predictions = model.predict(X_seq)
-        print("모델 예측 완료")
+        logger.info("모델 예측 완료")
         
         # 예측값 전처리
         pred_values = predictions.flatten()
@@ -354,7 +371,7 @@ def analyze():
         # NaN 값 확인 및 처리
         nan_count = np.isnan(pred_values).sum()
         if nan_count > 0:
-            print(f"경고: 예측값 중 {nan_count}개가 NaN입니다. 3.0으로 대체합니다.")
+            logger.warning(f"예측값 중 {nan_count}개가 NaN입니다. 3.0으로 대체합니다.")
             pred_values = np.nan_to_num(pred_values, nan=3.0)  # NaN을 3.0으로 대체
         
         # 예측값 범위 제한 (2.9 ~ 3.1)
@@ -378,15 +395,15 @@ def analyze():
         else:
             result_df['predicted_leverage'] = result_df['predicted_leverage'].fillna(3.0)
         
-        print(f"예측값 길이: {len(pred_values)}, 결과 데이터프레임 길이: {len(result_df)}")
-        print(f"예측 기간: {result_df.index[0].date()} ~ {result_df.index[-1].date()}")
+        logger.debug(f"예측값 길이: {len(pred_values)}, 결과 데이터프레임 길이: {len(result_df)}")
+        logger.info(f"예측 기간: {result_df.index[0].date()} ~ {result_df.index[-1].date()}")
         
         if result_df.empty:
             raise ValueError(f"No prediction data available for the selected date range after sequence preparation")
         
         # 예측값 통계 출력
-        print(f"예측 레버리지 통계 - 평균: {np.mean(pred_values):.4f}, 최소: {np.min(pred_values):.4f}, "
-              f"최대: {np.max(pred_values):.4f}, NaN 개수: {np.isnan(pred_values).sum()}")
+        logger.info(f"예측 레버리지 통계 - 평균: {np.mean(pred_values):.4f}, 최소: {np.min(pred_values):.4f}, "
+                   f"최대: {np.max(pred_values):.4f}, NaN 개수: {np.isnan(pred_values).sum()}")
 
         # NaN을 None으로 변환하는 헬퍼 함수
         def convert_nan_to_none(value):
@@ -412,57 +429,36 @@ def analyze():
             cumulative_predicted = calculate_cumulative_returns(predicted_returns, initial_value)
             
             # 디버깅을 위한 상세 정보 출력
-            print("\n[상세 계산 내역]")
-            print("1. QQQ 일별 수익률:", [f"{x:.6f}" for x in result_df['qqq_return'].head(5).tolist()])
-            print("2. 예측 레버리지:", [f"{x:.6f}" for x in result_df['predicted_leverage'].head(5).tolist()])
-            print("3. 자금 조달 비용:", [f"{x:.6f}" for x in result_df['total_funding_cost'].head(5).tolist()])
+            # 디버깅 정보는 DEBUG 레벨로 로깅
+            logger.debug("\n[상세 계산 내역]")
+            logger.debug(f"1. QQQ 일별 수익률: {[f'{x:.6f}' for x in result_df['qqq_return'].head(5).tolist()]}")
+            logger.debug(f"2. 예측 레버리지: {[f'{x:.6f}' for x in result_df['predicted_leverage'].head(5).tolist()]}")
+            logger.debug(f"3. 자금 조달 비용: {[f'{x:.6f}' for x in result_df['total_funding_cost'].head(5).tolist()]}")
             
-            # 계산 단계별 중간 결과 출력
+            # 계산 단계별 중간 결과
             qqq_x_leverage = result_df['qqq_return'] * result_df['predicted_leverage']
-            print("4. (QQQ * 레버리지):", [f"{x:.6f}" for x in qqq_x_leverage.head(5).tolist()])
+            logger.debug(f"4. (QQQ * 레버리지): {[f'{x:.6f}' for x in qqq_x_leverage.head(5).tolist()]}")
             
             predicted_returns = qqq_x_leverage - result_df['total_funding_cost']
-            print("5. (QQQ*레버리지 - 자금조달비용):", [f"{x:.6f}" for x in predicted_returns.head(5).tolist()])
-            
-            # 누적 수익률 계산 과정
-            print("\n[누적 수익률 계산 과정]")
-            print(f"초기값: {initial_value:.6f}")
-            for i in range(min(5, len(predicted_returns))):
-                daily_return = predicted_returns.iloc[i]
-                cum_value = initial_value * (1 + daily_return) if i == 0 else cum_value * (1 + daily_return)
-                print(f"Day {i+1}: {initial_value if i==0 else cum_value/(1+daily_return):.6f} * (1 + {daily_return:.6f}) = {cum_value:.6f}")
+            logger.debug(f"5. (QQQ*레버리지 - 자금조달비용): {[f'{x:.6f}' for x in predicted_returns.head(5).tolist()]}")
             
             # 3배 레버리지 QQQ 누적 수익률 (비교용)
-            # 3배 QQQ 수익률 (자금 조달 비용은 고려하지 않음)
             qqq_3x_returns = result_df['qqq_return'] * 3.0
-            
-            # 3배 QQQ 계산 과정 출력
-            print("\n[3배 QQQ 계산 과정]")
-            for i in range(min(5, len(qqq_3x_returns))):
-                daily_3x = qqq_3x_returns.iloc[i]
-                cum_3x = initial_value * (1 + daily_3x) if i == 0 else cum_3x * (1 + daily_3x)
-                print(f"Day {i+1}: {initial_value if i==0 else cum_3x/(1+daily_3x):.6f} * (1 + {daily_3x:.6f}) = {cum_3x:.6f}")
             cumulative_qqq_3x = calculate_cumulative_returns(qqq_3x_returns, initial_value)
             
-            # 디버깅을 위해 일부 값 출력
-            print("\n[누적 수익률 계산]")
-            print(f"초기값: {initial_value}")
-            print(f"실제 TQQQ 일별 수익률 예시: {actual_tqqq_returns.head(5).tolist()}")
-            print(f"예측 TQQQ 일별 수익률 예시: {predicted_returns.head(5).tolist()}")
-            print(f"3배 QQQ 일별 수익률 예시: {qqq_3x_returns.head(5).tolist()}")
-            print("\n[누적 수익률 예시]")
-            print(f"실제 TQQQ: {cumulative_tqqq.tail(1).values[0]:.2f}")
-            print(f"예측 TQQQ: {cumulative_predicted.tail(1).values[0]:.2f}")
-            print(f"3배 QQQ: {cumulative_qqq_3x.tail(1).values[0]:.2f}")
+            # 주요 결과만 INFO 레벨로 로깅
+            logger.info(f"최종 누적 수익률 - 실제 TQQQ: {cumulative_tqqq.tail(1).values[0]:.2f}, "
+                      f"예측 TQQQ: {cumulative_predicted.tail(1).values[0]:.2f}, "
+                      f"3배 QQQ: {cumulative_qqq_3x.tail(1).values[0]:.2f}")
             
         except Exception as e:
-            print(f"\n[오류] 누적 수익률 계산 중 오류 발생: {str(e)}")
+            logger.error(f"누적 수익률 계산 중 오류 발생: {str(e)}")
             if 'actual_tqqq_returns' in locals():
-                print(f"데이터 타입 - tqqq_return: {type(actual_tqqq_returns.iloc[0]) if len(actual_tqqq_returns) > 0 else 'empty'}")
+                logger.error(f"데이터 타입 - tqqq_return: {type(actual_tqqq_returns.iloc[0]) if len(actual_tqqq_returns) > 0 else 'empty'}")
             if 'predicted_returns' in locals():
-                print(f"데이터 타입 - predicted_returns: {type(predicted_returns.iloc[0]) if len(predicted_returns) > 0 else 'empty'}")
+                logger.error(f"데이터 타입 - predicted_returns: {type(predicted_returns.iloc[0]) if len(predicted_returns) > 0 else 'empty'}")
             if 'qqq_3x_returns' in locals():
-                print(f"데이터 타입 - qqq_3x_returns: {type(qqq_3x_returns.iloc[0]) if len(qqq_3x_returns) > 0 else 'empty'}")
+                logger.error(f"데이터 타입 - qqq_3x_returns: {type(qqq_3x_returns.iloc[0]) if len(qqq_3x_returns) > 0 else 'empty'}")
             
             # 오류 발생 시 초기값으로 채운 시리즈 반환
             cumulative_tqqq = pd.Series([initial_value] * len(result_df))
@@ -482,7 +478,7 @@ def analyze():
             'cumulative_qqq_3x': convert_nan_to_none(cumulative_qqq_3x.tolist())
         }
 
-        print("API 응답 준비 완료")
+        logger.info("API 응답 준비 완료")
         return jsonify(result)  # jsonify 사용
 
     except Exception as e:
