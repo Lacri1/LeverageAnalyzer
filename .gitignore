@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python cache
+.mypy_cache/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Data files - exclude all data files by default
+*.npy
+*.npz
+*.csv
+*.h5
+
+# Model files - explicitly include the ones we need
+*.pkl
+!leverage_scaler.pkl
+
+# Logs
+*.log
+logs/
+
+# Local config
+.env
+*.env
+config.py
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

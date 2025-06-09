@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TQQQ 레버리지 분석기</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/dist/date-fns.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            min-height: 100vh;
+            color: #2d3748;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 32px 32px 24px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .header h1 {
+            margin: 0 0 16px 0;
+            font-size: 2.2rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .info-text {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .content {
+            padding: 32px;
+        }
+
+        .control-panel {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .date-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .date-selector label {
+            font-weight: 500;
+            color: #4a5568;
+            font-size: 0.9rem;
+            min-width: 60px;
+        }
+
+        .date-selector input[type="date"] {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: #ffffff;
+            color: #2d3748;
+            transition: border-color 0.2s ease;
+            min-width: 140px;
+        }
+
+        .date-selector input[type="date"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .analyze-btn {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+
+        .analyze-btn:hover {
+            background: #5a67d8;
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .date-range-info {
+            background: #edf2f7;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+
+        .chart-section {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .chart-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 420px;
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* 반응형 디자인 */
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .header {
+                padding: 24px 20px 18px;
+            }
+
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .control-panel {
+                padding: 20px;
+            }
+
+            .date-selector {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+            }
+
+            .date-group {
+                justify-content: space-between;
+            }
+
+            .date-selector input[type="date"] {
+                min-width: auto;
+                flex: 1;
+            }
+
+            .chart-container {
+                height: 320px;
+                padding: 12px;
+            }
+        }
+
+        /* 로딩 애니메이션 */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 6px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 스크롤바 스타일링 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f7fafc;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>TQQQ 레버리지 분석기</h1>
+        <div class="info-text">
+            이 도구는 QQQ와 TQQQ의 성과를 비교하고 레버리지 효과를 분석합니다.<br>
+            QQQ 시작일: 1999년 3월 10일, TQQQ 시작일: 2010년 2월 11일<br>
+            QQQ 시작일 이전 조회는 지원하지 않으며 TQQQ 시작일 이전에는 예측만 출력합니다
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="control-panel">
+            <div class="date-selector">
+                <div class="date-group">
+                    <label for="start-date">시작일:</label>
+                    <input type="date" id="start-date" name="start-date">
+                </div>
+                <div class="date-group">
+                    <label for="end-date">종료일:</label>
+                    <input type="date" id="end-date" name="end-date">
+                </div>
+                <button id="analyze-btn" class="analyze-btn">분석하기</button>
+            </div>
+            <div id="date-range-info" class="date-range-info" style="display: none;"></div>
+        </div>
+
+        <div class="chart-section">
+            <div class="chart-title">TQQQ 누적 수익 비교</div>
+            <div class="chart-container">
+                <canvas id="leverageChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 날짜 기본값 설정 (한국 시간대 고려)
+    function getKoreaDate() {
+        const now = new Date();
+        // 한국 시간대(UTC+9)로 조정
+        const koreaTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (9 * 60 * 60000));
+        return koreaTime;
+    }
+
+    // 날짜 형식 변환 (YYYY-MM-DD)
+    function formatDateForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // 상수 정의
+    const QQQ_START_DATE = new Date('1999-03-10T00:00:00+09:00');
+    const TQQQ_START_DATE = new Date('2010-02-11T00:00:00+09:00');
+
+    // 날짜 기본값 설정 (한국 시간대 기준)
+    const today = getKoreaDate();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const sixMonthsAgo = new Date(today);
+    sixMonthsAgo.setMonth(today.getMonth() - 6);
+
+    // 날짜 입력 필드에 기본값 설정
+    document.getElementById('start-date').value = formatDateForInput(sixMonthsAgo);
+    document.getElementById('end-date').value = formatDateForInput(yesterday);
+
+    // API 요청하여 데이터 가져오기
+    async function fetchLeverageData() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+
+        // 날짜 유효성 검사
+        if (!startDate || !endDate) {
+            alert('시작일과 종료일을 모두 선택해주세요.');
+            return;
+        }
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            alert('유효한 날짜를 입력해주세요.');
+            return;
+        }
+
+        if (start > end) {
+            alert('종료일은 시작일 이후여야 합니다.');
+            return;
+        }
+
+        // 분석 중 메시지 표시
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const originalBtnText = analyzeBtn.textContent;
+        analyzeBtn.disabled = true;
+        analyzeBtn.innerHTML = '<span class="loading"></span>분석 중...';
+
+        // 날짜 범위 정보 업데이트 및 표시
+        const dateRangeInfo = document.getElementById('date-range-info');
+        dateRangeInfo.textContent = `분석 기간: ${formatDate(startDate)} ~ ${formatDate(endDate)}`;
+        dateRangeInfo.style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/analyze?start_date=${startDate}&end_date=${endDate}`);
+            if (!response.ok) {
+                throw new Error('데이터를 가져오는 데 실패했습니다.');
+            }
+            const data = await response.json();
+            updateChart(data);
+            updateLeverageInfo(data);
+        } catch (error) {
+            console.error('API 요청 오류:', error);
+            alert('데이터를 가져오는 중 오류가 발생했습니다: ' + error.message);
+        } finally {
+            // 버튼 상태 복원
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = originalBtnText;
+        }
+    }
+
+    // 그래프 업데이트
+    function updateChart(data) {
+        const ctx = document.getElementById('leverageChart').getContext('2d');
+
+        // 기존 차트가 있으면 제거
+        if (window.leverageChart && typeof window.leverageChart.destroy === 'function') {
+            window.leverageChart.destroy();
+        }
+
+        // 날짜 파싱
+        const parsedDates = data.dates.map(date => new Date(date));
+
+        // 백엔드에서 계산된 누적 수익률 사용
+        const actualReturns = data.cumulative_actual;
+        const predictedReturns = data.cumulative_predicted;
+
+        window.leverageChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    // 실제 TQQQ는 2010년 2월 11일 이후 데이터만 표시
+                    ...(parsedDates[0] >= TQQQ_START_DATE ? [{
+                        label: '실제 TQQQ 누적 수익 (백테스트)',
+                        data: actualReturns.map((value, index) => ({
+                            x: parsedDates[index],
+                            y: parsedDates[index] >= TQQQ_START_DATE ? value : null
+                        })).filter(item => item.y !== null),
+                        borderColor: '#16a085',
+                        backgroundColor: 'rgba(22, 160, 133, 0.1)',
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHitRadius: 8,
+                        pointBorderWidth: 2,
+                        pointBackgroundColor: '#16a085',
+                        pointBorderColor: '#ffffff',
+                        tension: 0.1
+                    }] : []),
+                    {
+                        label: '예측 TQQQ 누적 수익 (모델)',
+                        data: predictedReturns.map((value, index) => ({
+                            x: parsedDates[index],
+                            y: value
+                        })),
+                        borderColor: '#e67e22',
+                        backgroundColor: 'rgba(230, 126, 34, 0.1)',
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHitRadius: 8,
+                        pointBorderWidth: 2,
+                        pointBackgroundColor: '#e67e22',
+                        pointBorderColor: '#ffffff',
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    title: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(45, 55, 72, 0.95)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        borderColor: '#cbd5e0',
+                        borderWidth: 1,
+                        cornerRadius: 6,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
+                            },
+                            title: function(context) {
+                                return new Date(context[0].parsed.x).toLocaleDateString('ko-KR');
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            font: {
+                                size: 11,
+                                weight: 500
+                            },
+                            color: '#4a5568',
+                            padding: 15
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'yyyy-MM-dd'
+                        },
+                        title: {
+                            display: true,
+                            text: '날짜',
+                            font: {
+                                size: 11,
+                                weight: 500
+                            },
+                            color: '#718096'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)',
+                            borderColor: '#e2e8f0'
+                        },
+                        ticks: {
+                            color: '#718096',
+                            font: {
+                                size: 10
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: '누적 수익 (기준: 100)',
+                            font: {
+                                size: 11,
+                                weight: 500
+                            },
+                            color: '#718096'
+                        },
+                        min: data => {
+                            const values = data.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
+                            return Math.min(0, ...values) * 1.1;
+                        },
+                        max: data => {
+                            const values = data.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
+                            return Math.max(0, ...values) * 1.1;
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(2);
+                            },
+                            color: '#718096',
+                            font: {
+                                size: 10
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)',
+                            borderColor: '#e2e8f0'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 날짜 포맷팅 함수
+    function formatDate(dateString) {
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString('ko-KR', options);
+    }
+
+    // 레버리지 비율 정보 업데이트
+    function updateLeverageInfo(data) {
+        // 레버리지 정보가 없으면 무시
+        if (!data) return;
+
+        // 날짜 범위 정보 업데이트 (API 응답에 날짜가 있는 경우)
+        const dateInfoElement = document.getElementById('date-range-info');
+        if (dateInfoElement && data.dates && data.dates.length > 0) {
+            const startDate = data.dates[0];
+            const endDate = data.dates[data.dates.length - 1];
+            dateInfoElement.textContent = `분석 기간: ${formatDate(startDate)} ~ ${formatDate(endDate)}`;
+            dateInfoElement.style.display = 'block';
+        }
+    }
+
+    // 분석하기 버튼 클릭 이벤트 리스너 추가
+    document.getElementById('analyze-btn').addEventListener('click', fetchLeverageData);
+
+    // 날짜 입력 필드 설정
+    function setupDateInputs() {
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+
+        // 날짜 입력 필드의 최소값 설정 (QQQ 시작일)
+        startDateInput.min = formatDateForInput(QQQ_START_DATE);
+        endDateInput.min = formatDateForInput(QQQ_START_DATE);
+
+        // 기본값 설정 (최근 6개월 또는 TQQQ 시작일 이후)
+        const today = getKoreaDate();
+        let defaultEndDate = new Date(today);
+        defaultEndDate.setDate(today.getDate() - 1); // 어제 날짜까지
+
+        let defaultStartDate = new Date(defaultEndDate);
+        defaultStartDate.setMonth(defaultStartDate.getMonth() - 6); // 6개월 전
+
+        // 시작일이 TQQQ 시작일 이전이면 TQQQ 시작일로 설정
+        if (defaultStartDate < TQQQ_START_DATE) {
+            defaultStartDate = new Date(TQQQ_START_DATE);
+        }
+
+        // 날짜 입력 필드에 기본값 설정
+        startDateInput.valueAsDate = defaultStartDate;
+        endDateInput.valueAsDate = defaultEndDate;
+
+        // 날짜 변경 이벤트 리스너 추가
+        startDateInput.addEventListener('change', function() {
+            const startDate = new Date(this.value);
+            const endDate = new Date(endDateInput.value);
+
+            // 시작일이 종료일보다 이후인 경우 조정
+            if (startDate > endDate) {
+                const newEndDate = new Date(startDate);
+                newEndDate.setDate(startDate.getDate() + 30); // 30일 후로 설정
+                endDateInput.valueAsDate = newEndDate;
+            }
+        });
+    }
+
+    // 페이지 로드 시 초기 설정
+    document.addEventListener('DOMContentLoaded', function() {
+        setupDateInputs();
+        fetchLeverageData();
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "features": [
+    "qqq_return",
+    "tqqq_vol",
+    "tqqq_price",
+    "tqqq_high_low",
+    "tqqq_gap",
+    "tqqq_price_to_ma5",
+    "tqqq_price_to_ma20",
+    "tqqq_volume_ratio",
+    "tqqq_momentum_5d",
+    "tqqq_momentum_10d",
+    "tqqq_momentum_20d",
+    "tqqq_volatility",
+    "tqqq_volatility_ratio",
+    "tqqq_high_low_ratio",
+    "vix"
+  ],
+  "seq_length": 10
+}
