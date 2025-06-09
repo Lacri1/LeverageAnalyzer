@@ -4,6 +4,10 @@ A web-based dashboard application that visualizes the prediction model for TQQQ'
 It utilizes a deep learning model trained in [LeverageGenerator](https://github.com/Lacri1/LeverageGenerator) to calculate and visualize TQQQ's expected returns.
 
 
+## Screenshot
+
+![Leverage Analyzer Dashboard](assets/screenshot.png)
+
 ## Key Features
 
 - **Custom Date Range Analysis**: Analyze data from March 10, 1999 (QQQ listing date) to present
