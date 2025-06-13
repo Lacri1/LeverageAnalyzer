@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TQQQ 레버리지 분석기</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/dist/date-fns.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@latest/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -204,15 +204,115 @@
         }
 
         /* 로딩 애니메이션 */
+        .toggle-btn, #analyze-btn {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            color: #212529;
+            padding: 8px 15px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        #analyze-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 15px;
+            min-width: 100px; /* Ensure consistent width */
+            white-space: nowrap;
+            position: relative;
+        }
+        
+        .date-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Disabled input styling */
+        input[type="date"]:disabled {
+            background-color: #f5f5f5;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .date-group {
+            position: relative;
+        }
+        
+        .date-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.9em;
+            color: #555;
+        }
+        
+        #analyze-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
+        #analyze-btn:hover:not(:disabled) {
+            background-color: #e9ecef;
+        }
+        
+        .spinner-border {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 0.2em solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+            margin-right: 0.5rem;
+        }
+        
+        .toggle-btn:hover {
+            background-color: #e9ecef;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        /* Smooth tooltip transition */
+        .chartjs-tooltip {
+            opacity: 0;
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 3px;
+            padding: 6px 10px;
+            pointer-events: none;
+            transition: all 0.3s ease;
+            transform: translate(-50%, 0);
+            z-index: 1000;
+        }
+        
+        .chartjs-tooltip.show {
+            opacity: 1;
+            transform: translate(-50%, -100%);
+        }
+        
+        .toggle-btn.active {
+            background-color: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+        
+        .toggle-icon {
+            margin-right: 5px;
+            font-size: 12px;
+        }
+        
         .loading {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            width: 1rem;
+            height: 1rem;
+            vertical-align: -0.125em;
+            border: 0.2em solid currentColor;
+            border-right-color: transparent;
             border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 6px;
+            animation: spin 0.75s linear infinite;
+            margin-right: 0.5rem;
+            flex-shrink: 0;
         }
 
         @keyframes spin {
@@ -260,22 +360,57 @@
                     <label for="end-date">종료일:</label>
                     <input type="date" id="end-date" name="end-date">
                 </div>
-                <button id="analyze-btn" class="analyze-btn">분석하기</button>
+                <button type="submit" id="analyze-btn" class="analyze-btn">분석 시작</button>
             </div>
-            <div id="date-range-info" class="date-range-info" style="display: none;"></div>
         </div>
-
         <div class="chart-section">
-            <div class="chart-title">TQQQ 누적 수익 비교</div>
-            <div class="chart-container">
+            <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 class="chart-title" style="margin: 0;">TQQQ 누적 수익 비교</h2>
+                <div class="chart-controls" style="margin-left: 20px;">
+                    <button id="toggleQQQ" class="toggle-btn active" data-visible="true" style="
+                        padding: 8px 16px;
+                        border: 1px solid #4f46e5;
+                        border-radius: 6px;
+                        background: #4f46e5;
+                        color: white;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 500;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        transition: all 0.2s ease;
+                    ">
+                        <span class="toggle-text">QQQ 수익률 표시</span>
+                    </button>
+                </div>
+            </div>
+            <div class="chart-container" style="position: relative; height: 70vh; width: 100%;">
                 <canvas id="leverageChart"></canvas>
             </div>
         </div>
     </div>
-</div>
+</div></body>
 
 <script>
-    // 날짜 기본값 설정 (한국 시간대 고려)
+
+    // 상수 정의
+    const QQQ_START_DATE = new Date('1999-03-10T00:00:00+09:00');
+    const TQQQ_START_DATE = new Date('2010-02-11T00:00:00+09:00');
+
+    // 날짜 포맷팅 함수 (YYYY-MM-DD)
+    function formatDateForInput(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            console.error('Invalid date object:', date);
+            return '';
+        }
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    // 한국 시간대 날짜 가져오기
     function getKoreaDate() {
         const now = new Date();
         // 한국 시간대(UTC+9)로 조정
@@ -283,178 +418,498 @@
         return koreaTime;
     }
 
-    // 날짜 형식 변환 (YYYY-MM-DD)
-    function formatDateForInput(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    // 상수 정의
-    const QQQ_START_DATE = new Date('1999-03-10T00:00:00+09:00');
-    const TQQQ_START_DATE = new Date('2010-02-11T00:00:00+09:00');
-
-    // 날짜 기본값 설정 (한국 시간대 기준)
-    const today = getKoreaDate();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const sixMonthsAgo = new Date(today);
-    sixMonthsAgo.setMonth(today.getMonth() - 6);
-
-    // 날짜 입력 필드에 기본값 설정
-    document.getElementById('start-date').value = formatDateForInput(sixMonthsAgo);
-    document.getElementById('end-date').value = formatDateForInput(yesterday);
-
     // API 요청하여 데이터 가져오기
     async function fetchLeverageData() {
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
-
-        // 날짜 유효성 검사
-        if (!startDate || !endDate) {
-            alert('시작일과 종료일을 모두 선택해주세요.');
+        // Prevent duplicate requests
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        if (!startDateInput || !endDateInput) {
+            throw new Error('날짜 입력 요소를 찾을 수 없습니다.');
+        }
+        
+        const startDate = startDateInput.value.trim();
+        const endDate = endDateInput.value.trim();
+        
+        if (isRequestCached(startDate, endDate)) {
+            console.log('Request already in progress, skipping...');
             return;
         }
-
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-            alert('유효한 날짜를 입력해주세요.');
-            return;
-        }
-
-        if (start > end) {
-            alert('종료일은 시작일 이후여야 합니다.');
-            return;
-        }
-
-        // 분석 중 메시지 표시
-        const analyzeBtn = document.getElementById('analyze-btn');
-        const originalBtnText = analyzeBtn.textContent;
-        analyzeBtn.disabled = true;
-        analyzeBtn.innerHTML = '<span class="loading"></span>분석 중...';
-
-        // 날짜 범위 정보 업데이트 및 표시
-        const dateRangeInfo = document.getElementById('date-range-info');
-        dateRangeInfo.textContent = `분석 기간: ${formatDate(startDate)} ~ ${formatDate(endDate)}`;
-        dateRangeInfo.style.display = 'block';
-
+        
+        console.log('fetchLeverageData called');
+        cacheRequest(startDate, endDate);
+        
         try {
-            const response = await fetch(`/api/analyze?start_date=${startDate}&end_date=${endDate}`);
-            if (!response.ok) {
-                throw new Error('데이터를 가져오는 데 실패했습니다.');
+            // 입력 요소 가져오기
+            const startDateInput = document.getElementById('start-date');
+            const endDateInput = document.getElementById('end-date');
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const dateRangeInfo = document.getElementById('date-range-info');
+            
+            if (!startDateInput || !endDateInput || !analyzeBtn) {
+                throw new Error('필수 요소를 찾을 수 없습니다.');
             }
+            
+            const startDate = startDateInput.value.trim();
+            const endDate = endDateInput.value.trim();
+            
+            console.log('Fetching data for date range:', { startDate, endDate });
+            
+            // 날짜 유효성 검사
+            if (!startDate || !endDate) {
+                throw new Error('시작일과 종료일을 모두 선택해주세요.');
+            }
+            
+            const start = new Date(startDate + 'T00:00:00+09:00');
+            const end = new Date(endDate + 'T23:59:59+09:00');
+            
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                throw new Error('유효한 날짜 형식이 아닙니다. (YYYY-MM-DD)');
+            }
+            
+            if (start > end) {
+                throw new Error('종료일은 시작일 이후여야 합니다.');
+            }
+            
+            // QQQ 시작일보다 이전 날짜 체크
+            if (start < QQQ_START_DATE) {
+                throw new Error(`시작일은 ${formatDate(QQQ_START_DATE)} 이후로 설정해주세요.`);
+            }
+            
+            // 버튼 비활성화 및 로딩 표시
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<span class="loading"></span>분석 중';
+            
+            // 날짜 범위 정보 표시
+            if (dateRangeInfo) {
+                dateRangeInfo.textContent = `분석 기간: ${formatDate(startDate)} ~ ${formatDate(endDate)}`;
+                dateRangeInfo.style.display = 'block';
+            }
+            
+            // API 요청
+            const url = `/api/analyze?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+            console.log('Making API request to:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            console.log('API response status:', response.status);
+            
+            if (!response.ok) {
+                let errorMessage = `서버 오류 (${response.status})`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData && errorData.error) {
+                        errorMessage = errorData.error;
+                    } else {
+                        errorMessage = await response.text();
+                    }
+                } catch (e) {
+                    errorMessage = `서버 응답을 처리할 수 없습니다. (${response.status})`;
+                }
+                throw new Error(errorMessage);
+            }
+            
             const data = await response.json();
+            console.log('API response data:', data);
+            
+            // 차트 및 정보 업데이트
             updateChart(data);
             updateLeverageInfo(data);
+            
         } catch (error) {
             console.error('API 요청 오류:', error);
-            alert('데이터를 가져오는 중 오류가 발생했습니다: ' + error.message);
+            alert(`오류 발생: ${error.message || '알 수 없는 오류가 발생했습니다.'}`);
+            
+            // 오류 메시지 표시
+            const errorInfo = document.getElementById('error-info');
+            if (errorInfo) {
+                errorInfo.textContent = `오류: ${error.message || '알 수 없는 오류'}`;
+                errorInfo.style.display = 'block';
+                
+                // 5초 후 오류 메시지 숨기기
+                setTimeout(() => {
+                    if (errorInfo) errorInfo.style.display = 'none';
+                }, 5000);
+            }
+            
+            throw error; // 상위 핸들러에서 추가 처리를 위해 다시 throw
         } finally {
             // 버튼 상태 복원
-            analyzeBtn.disabled = false;
-            analyzeBtn.textContent = originalBtnText;
+            const analyzeBtn = document.getElementById('analyze-btn');
+            if (analyzeBtn) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = '분석하기';
+            }
         }
     }
 
-    // 그래프 업데이트
-    function updateChart(data) {
-        const ctx = document.getElementById('leverageChart').getContext('2d');
+    // 데이터를 100으로 정규화하는 함수
+    function normalizeToHundred(data) {
+        if (!data || data.length === 0) return [];
+        const firstValue = data[0];
+        if (firstValue === 0) return data; // 0으로 나누기 방지
+        return data.map(value => (value / firstValue) * 100);
+    }
 
-        // 기존 차트가 있으면 제거
-        if (window.leverageChart && typeof window.leverageChart.destroy === 'function') {
+    // 데이터 샘플링 함수 (대규모 데이터셋 성능 최적화)
+    function sampleData(dates, values, maxPoints = 500) {
+        if (dates.length <= maxPoints) {
+            return { dates, values };
+        }
+        
+        const step = Math.ceil(dates.length / maxPoints);
+        const sampledDates = [];
+        const sampledValues = [];
+        
+        for (let i = 0; i < dates.length; i += step) {
+            sampledDates.push(dates[i]);
+            sampledValues.push(values[i]);
+        }
+        
+        // 마지막 데이터 포인트는 항상 포함
+        if (sampledDates[sampledDates.length - 1] !== dates[dates.length - 1]) {
+            sampledDates.push(dates[dates.length - 1]);
+            sampledValues.push(values[values.length - 1]);
+        }
+        
+        console.log(`Sampled data from ${dates.length} to ${sampledDates.length} points`);
+        return { dates: sampledDates, values: sampledValues };
+    }
+    
+    // 차트 업데이트
+    function updateChart(data) {
+        if (!data) {
+            console.error('No data provided to updateChart');
+            return;
+        }
+        
+        console.log('Updating chart with data:', data);
+        
+        const chartElement = document.getElementById('leverageChart');
+        if (!chartElement) {
+            console.error('Chart element not found');
+            return;
+        }
+        
+        const ctx = chartElement.getContext('2d');
+        if (!ctx) {
+            console.error('Could not get 2D context');
+            return;
+        }
+        
+        // 기존 차트가 있으면 제거 (안전하게 체크)
+        if (window.leverageChart) {
+            try {
+                if (typeof window.leverageChart.destroy === 'function') {
+                    window.leverageChart.destroy();
+                }
+            } catch (e) {
+                console.warn('Error destroying previous chart:', e);
+            } finally {
+                window.leverageChart = null;
+            }
+        }
+        
+        // 데이터 유효성 검사
+        if (!data.dates || !data.cumulative_actual || !data.cumulative_predicted) {
+            console.error('필수 데이터가 누락되었습니다.', {
+                dates: !!data.dates,
+                actual: !!data.cumulative_actual,
+                predicted: !!data.cumulative_predicted
+            });
+            return;
+        }
+
+        // 날짜 데이터 가공
+        const dates = data.dates || [];
+        const actualReturns = data.cumulative_actual || [];
+        const predictedReturns = data.cumulative_predicted || [];
+        const qqqData = data.actual_qqq || [];
+        
+        console.log('데이터 수신 - 날짜:', dates.length, '실제 TQQQ:', actualReturns.length, 
+                    '예측 TQQQ:', predictedReturns.length, 'QQQ:', qqqData.length);
+        
+        // TQQQ 시작일 설정 (2010-02-11 00:00:00 KST)
+        const tqqqStartDate = new Date('2010-02-11T00:00:00+09:00');
+        let filteredDates = [];
+        let filteredActualReturns = [];
+        let filteredPredictedReturns = [];
+        let filteredQQQ = [];
+        
+        // 날짜 파싱을 한 번만 수행하여 성능 최적화
+        const parsedDates = dates.map((dateStr, index) => {
+            try {
+                return { date: new Date(dateStr), index };
+            } catch (e) {
+                console.error('날짜 파싱 오류:', dateStr, e);
+                return null;
+            }
+        }).filter(item => item !== null);
+        
+        // 요청된 날짜 범위 확인 (2010년 이전인지 여부)
+        const isBefore2010 = parsedDates.length > 0 && parsedDates[0].date < tqqqStartDate;
+        
+        if (isBefore2010) {
+            console.log('2010년 이전 데이터 요청 - 예측치만 표시합니다.');
+            // 2010년 이전 데이터는 예측치만 필터링
+            for (const { date, index } of parsedDates) {
+                filteredDates.push(dates[index]);
+                if (predictedReturns[index] !== undefined) {
+                    filteredPredictedReturns.push(predictedReturns[index]);
+                    // 실제 TQQQ 데이터는 비워둠 (표시 안 함)
+                    filteredActualReturns.push(null);
+                    if (qqqData[index] !== undefined) filteredQQQ.push(qqqData[index]);
+                }
+            }
+        } else {
+            // 2010년 이후 데이터는 기존과 동일하게 필터링
+            for (const { date, index } of parsedDates) {
+                if (date >= tqqqStartDate) {
+                    filteredDates.push(dates[index]);
+                    if (actualReturns[index] !== undefined) filteredActualReturns.push(actualReturns[index]);
+                    if (predictedReturns[index] !== undefined) filteredPredictedReturns.push(predictedReturns[index]);
+                    if (qqqData[index] !== undefined) filteredQQQ.push(qqqData[index]);
+                }
+            }
+        }
+        
+        // 시작일 이후의 데이터만 필터링
+        const startDateInput = document.getElementById('start-date').value;
+        let startIndex = 0;
+        
+        if (startDateInput) {
+            // Convert input date to timestamp for proper comparison
+            const startTimestamp = new Date(startDateInput).getTime();
+            startIndex = filteredDates.findIndex(date => {
+                const dateTimestamp = new Date(date).getTime();
+                return dateTimestamp >= startTimestamp;
+            });
+            
+            if (startIndex === -1) {
+                // If no date is found after start date, use the last date
+                startIndex = filteredDates.length - 1;
+            }
+            
+            console.log('Filtering data - start date:', startDateInput, 'start index:', startIndex);
+        }
+        
+        // Apply the filter
+        filteredDates = filteredDates.slice(startIndex);
+        filteredActualReturns = filteredActualReturns.slice(startIndex);
+        filteredPredictedReturns = filteredPredictedReturns.slice(startIndex);
+        filteredQQQ = filteredQQQ.slice(startIndex);
+        
+        console.log('After date filtering - data points:', filteredDates.length, 
+                   'from:', filteredDates[0], 'to:', filteredDates[filteredDates.length - 1]);
+        
+        // 데이터 정규화 (100으로 초기값 맞추기)
+        let normalizedActualReturns = [];
+        let normalizedPredictedReturns = [];
+        
+        // 실제 TQQQ 수익률 정규화 (2010년 이후 데이터만)
+        if (filteredActualReturns.length > 0) {
+            normalizedActualReturns = normalizeToHundred(filteredActualReturns);
+        }
+        
+        // 예측 TQQQ 수익률 정규화
+        if (filteredPredictedReturns.length > 0) {
+            normalizedPredictedReturns = normalizeToHundred(filteredPredictedReturns);
+        }
+        
+        // normalizedQQQ 정의
+        const normalizedQQQ = normalizeToHundred(qqqData);
+        
+        // 디버깅 로그
+        console.log('데이터 정규화 완료 - 실제 TQQQ:', normalizedActualReturns.length, 
+                   '예측 TQQQ:', normalizedPredictedReturns.length, 
+                   'QQQ:', normalizedQQQ.length);
+        
+        // 데이터 길이 검증 및 조정
+        const minLength = Math.min(
+            filteredDates.length,
+            normalizedActualReturns.length,
+            normalizedPredictedReturns.length
+        );
+        
+        // 모든 배열을 동일한 길이로 조정
+        function trimToLength(arr, len) {
+            return arr.length > 0 ? arr.slice(0, len) : [];
+        }
+        
+        filteredDates = trimToLength(filteredDates, minLength);
+        normalizedActualReturns = trimToLength(normalizedActualReturns, minLength);
+        normalizedPredictedReturns = trimToLength(normalizedPredictedReturns, minLength);
+        
+        console.log('데이터 길이 조정 완료:', {
+            dates: filteredDates.length,
+            actual: normalizedActualReturns.length,
+            predicted: normalizedPredictedReturns.length
+        });
+        
+        // 대규모 데이터셋 샘플링 (성능 최적화)
+        const maxPoints = 200; // 최대 200개 포인트로 제한 (성능 개선을 위해 감소)
+        const sampledData = sampleData(filteredDates, normalizedActualReturns, maxPoints);
+        
+        // 샘플링된 인덱스에 맞게 다른 데이터도 필터링
+        function sampleDataToMatchDates(dates, values, dateSamples) {
+            if (!Array.isArray(dates) || !Array.isArray(values) || !Array.isArray(dateSamples)) {
+                console.error('Invalid input for sampleDataToMatchDates:', {dates, values, dateSamples});
+                return [];
+            }
+            
+            const sampledValues = [];
+            const dateSet = new Set(dateSamples);
+            
+            for (let i = 0; i < dates.length; i++) {
+                if (dateSet.has(dates[i])) {
+                    sampledValues.push(values[i]);
+                }
+            }
+            
+            return sampledValues;
+        }
+        
+        // Sample data to improve performance - limit to 500 data points max
+        const maxDataPoints = 500;
+        const step = Math.max(1, Math.ceil(filteredDates.length / maxDataPoints));
+        
+        // Sample the data
+        const sampledDates = [];
+        const sampledActualReturns = [];
+        const sampledPredictedReturns = [];
+        
+        for (let i = 0; i < filteredDates.length; i += step) {
+            sampledDates.push(filteredDates[i]);
+            if (normalizedActualReturns[i] !== undefined) {
+                sampledActualReturns.push(normalizedActualReturns[i]);
+            }
+            if (normalizedPredictedReturns[i] !== undefined) {
+                sampledPredictedReturns.push(normalizedPredictedReturns[i]);
+            }
+        }
+        
+        // Use sampled data with new variable names
+        const finalFilteredDates = sampledDates;
+        const finalActualReturns = sampledActualReturns;
+        const finalPredictedReturns = sampledPredictedReturns;
+        
+        console.log('Filtered data range:', {
+            startDate: finalFilteredDates[0] || 'N/A',
+            endDate: finalFilteredDates[finalFilteredDates.length - 1] || 'N/A',
+            dataPoints: finalFilteredDates.length
+        });
+        
+        // y축 범위 계산을 위한 모든 데이터 포인트 (QQQ 제외)
+        const allDataPoints = [
+            ...(finalActualReturns || []),
+            ...(finalPredictedReturns || [])
+        ].filter(value => value !== null && value !== undefined && !isNaN(parseFloat(value)));
+        
+        // 데이터가 없을 경우 기본값 설정
+        if (!allDataPoints.length) {
+            allDataPoints.push(100);
+        }
+        
+        // y축 범위 설정 (100을 중심으로 대칭이 되도록 조정)
+        const minValue = Math.min(...allDataPoints);
+        const maxValue = Math.max(...allDataPoints);
+        const range = maxValue - minValue || 20; // range가 0이면 20으로 설정
+        const padding = Math.max(5, range * 0.1); // 최소 5% 여유
+        
+        // 애니메이션 설정 (더 부드러운 애니메이션을 위해 조정)
+        const animationDuration = 1200; // 애니메이션 지속 시간 (밀리초)
+        const easing = 'easeInOutCubic'; // 더 부드러운 이징 함수
+
+        // Update existing chart or create new one
+        if (window.leverageChart) {
             window.leverageChart.destroy();
         }
 
-        // 날짜 파싱
-        const parsedDates = data.dates.map(date => new Date(date));
-
-        // 백엔드에서 계산된 누적 수익률 사용
-        const actualReturns = data.cumulative_actual;
-        const predictedReturns = data.cumulative_predicted;
-
+        // Chart options with enhanced animations and tooltips
         window.leverageChart = new Chart(ctx, {
             type: 'line',
             data: {
+                labels: finalFilteredDates,
                 datasets: [
-                    // 실제 TQQQ는 2010년 2월 11일 이후 데이터만 표시
-                    ...(parsedDates[0] >= TQQQ_START_DATE ? [{
-                        label: '실제 TQQQ 누적 수익 (백테스트)',
-                        data: actualReturns.map((value, index) => ({
-                            x: parsedDates[index],
-                            y: parsedDates[index] >= TQQQ_START_DATE ? value : null
-                        })).filter(item => item.y !== null),
-                        borderColor: '#16a085',
-                        backgroundColor: 'rgba(22, 160, 133, 0.1)',
-                        fill: true,
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        pointHoverRadius: 5,
-                        pointHitRadius: 8,
-                        pointBorderWidth: 2,
-                        pointBackgroundColor: '#16a085',
-                        pointBorderColor: '#ffffff',
-                        tension: 0.1
-                    }] : []),
                     {
-                        label: '예측 TQQQ 누적 수익 (모델)',
-                        data: predictedReturns.map((value, index) => ({
-                            x: parsedDates[index],
-                            y: value
-                        })),
-                        borderColor: '#e67e22',
-                        backgroundColor: 'rgba(230, 126, 34, 0.1)',
-                        fill: true,
+                        label: '실제 TQQQ 수익률',
+                        data: finalActualReturns,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
                         borderWidth: 2,
                         pointRadius: 0,
-                        pointHoverRadius: 5,
-                        pointHitRadius: 8,
-                        pointBorderWidth: 2,
-                        pointBackgroundColor: '#e67e22',
-                        pointBorderColor: '#ffffff',
-                        tension: 0.1
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: '예측 TQQQ 수익률',
+                        data: finalPredictedReturns,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'QQQ 수익률',
+                        data: normalizedQQQ,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                        hidden: false
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: {
+                    duration: 0
+                },
                 interaction: {
-                    intersect: false,
-                    mode: 'index'
+                    mode: 'index',
+                    intersect: false
+                },
+                layout: {
+                    padding: {
+                        top: 10,
+                        bottom: 20
+                    }
                 },
                 plugins: {
-                    title: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(45, 55, 72, 0.95)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        borderColor: '#cbd5e0',
-                        borderWidth: 1,
-                        cornerRadius: 6,
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
-                            },
-                            title: function(context) {
-                                return new Date(context[0].parsed.x).toLocaleDateString('ko-KR');
-                            }
+                    legend: {
+                        position: 'bottom',
+                        align: 'start',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 15,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
                     },
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            font: {
-                                size: 11,
-                                weight: 500
-                            },
-                            color: '#4a5568',
-                            padding: 15
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toFixed(2) + '%';
+                                }
+                                return label;
+                            }
                         }
                     }
                 },
@@ -463,58 +918,30 @@
                         type: 'time',
                         time: {
                             unit: 'month',
-                            tooltipFormat: 'yyyy-MM-dd'
-                        },
-                        title: {
-                            display: true,
-                            text: '날짜',
-                            font: {
-                                size: 11,
-                                weight: 500
-                            },
-                            color: '#718096'
+                            tooltipFormat: 'yyyy-MM-dd',
+                            displayFormats: {
+                                day: 'MMM d',
+                                week: 'MMM d',
+                                month: 'MMM yyyy',
+                                quarter: 'MMM yyyy',
+                                year: 'yyyy'
+                            }
                         },
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)',
-                            borderColor: '#e2e8f0'
+                            display: false
                         },
                         ticks: {
-                            color: '#718096',
-                            font: {
-                                size: 10
-                            }
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
                         }
                     },
                     y: {
-                        title: {
-                            display: true,
-                            text: '누적 수익 (기준: 100)',
-                            font: {
-                                size: 11,
-                                weight: 500
-                            },
-                            color: '#718096'
-                        },
-                        min: data => {
-                            const values = data.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
-                            return Math.min(0, ...values) * 1.1;
-                        },
-                        max: data => {
-                            const values = data.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
-                            return Math.max(0, ...values) * 1.1;
-                        },
+                        beginAtZero: false,
                         ticks: {
                             callback: function(value) {
-                                return value.toFixed(2);
-                            },
-                            color: '#718096',
-                            font: {
-                                size: 10
+                                return value + '%';
                             }
-                        },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)',
-                            borderColor: '#e2e8f0'
                         }
                     }
                 }
@@ -524,8 +951,14 @@
 
     // 날짜 포맷팅 함수
     function formatDate(dateString) {
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-        return new Date(dateString).toLocaleDateString('ko-KR', options);
+        if (!dateString) return 'N/A';
+        try {
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            return new Date(dateString).toLocaleDateString('ko-KR', options);
+        } catch (e) {
+            console.error('Error formatting date:', e);
+            return dateString; // Return original string if date parsing fails
+        }
     }
 
     // 레버리지 비율 정보 업데이트
@@ -543,54 +976,364 @@
         }
     }
 
-    // 분석하기 버튼 클릭 이벤트 리스너 추가
-    document.getElementById('analyze-btn').addEventListener('click', fetchLeverageData);
+    // Track initialization and loading states
+    let isInitialized = false;
+    let isAnalyzing = false;
+    let isFirstLoad = true;
+    
+    // Request cache to prevent duplicate requests
+    const requestCache = new Map();
+    
+    // Function to check if request is cached
+    function isRequestCached(startDate, endDate) {
+        const cacheKey = `${startDate}-${endDate}`;
+        return requestCache.has(cacheKey);
+    }
+    
+    // Function to cache request
+    function cacheRequest(startDate, endDate) {
+        const cacheKey = `${startDate}-${endDate}`;
+        requestCache.set(cacheKey, true);
+        // Clear cache after 5 seconds
+        setTimeout(() => requestCache.delete(cacheKey), 5000);
+    }
+    
+    // 전역 변수로 QQQ 데이터셋 저장
+    let qqqDatasetBackup = null;
+    let isQQQVisible = true;
+
+    // 토글 버튼 클릭 이벤트 핸들러
+    document.getElementById('toggleQQQ').addEventListener('click', function() {
+        const toggleBtn = this;
+        isQQQVisible = !isQQQVisible;
+        
+        // 버튼 UI 업데이트 (색상 변경)
+        if (isQQQVisible) {
+            toggleBtn.style.backgroundColor = '#4f46e5';
+            toggleBtn.style.borderColor = '#4f46e5';
+        } else {
+            toggleBtn.style.backgroundColor = '#64748b';
+            toggleBtn.style.borderColor = '#64748b';
+        }
+        
+        // 차트 데이터셋 업데이트
+        if (window.leverageChart) {
+            const chart = window.leverageChart;
+            const qqqIndex = chart.data.datasets.findIndex(dataset => dataset.label === 'QQQ 수익률');
+            
+            if (isQQQVisible) {
+                // QQQ 보이기 (백업에서 복원)
+                if (qqqDatasetBackup) {
+                    if (qqqIndex === -1) {
+                        // 데이터셋이 아예 없는 경우에만 추가
+                        chart.data.datasets.push(qqqDatasetBackup);
+                    } else {
+                        // 이미 있는 경우 숨김 해제
+                        chart.data.datasets[qqqIndex].hidden = false;
+                    }
+                }
+            } else {
+                // QQQ 숨기기 (데이터셋 백업 후 제거)
+                if (qqqIndex !== -1) {
+                    qqqDatasetBackup = JSON.parse(JSON.stringify(chart.data.datasets[qqqIndex]));
+                    chart.data.datasets.splice(qqqIndex, 1);
+                }
+            }
+            chart.update();
+        }
+    });
+
+    // Initialize the app when the DOM is fully loaded
+    const initApp = () => {
+        // Remove this listener to prevent multiple initializations
+        document.removeEventListener('DOMContentLoaded', initApp);
+        console.log('DOM fully loaded, initializing app...');
+        initializeApp();
+    };
+    
+    // Check if the DOM is already loaded
+    if (document.readyState === 'loading') {
+        // Use capture phase and once to ensure we don't interfere with other listeners
+        document.addEventListener('DOMContentLoaded', initApp, { once: true, capture: true });
+    } else {
+        // If the DOM is already loaded, initialize immediately
+        console.log('DOM already loaded, initializing app immediately');
+        setTimeout(initApp, 0);
+    }
+
+    // Update button loading state
+    function setAnalyzeButtonLoading(isLoading) {
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        
+        if (!analyzeBtn || !startDateInput || !endDateInput) return;
+        
+        isAnalyzing = isLoading;
+        
+        // Update analyze button
+        analyzeBtn.disabled = isLoading;
+        analyzeBtn.innerHTML = isLoading ? 
+            '<span class="spinner-border" role="status" aria-hidden="true"></span><span class="ml-2">분석 중</span>' :
+            '<span class="ml-2">분석하기</span>';
+        analyzeBtn.style.display = 'flex';
+        analyzeBtn.style.justifyContent = 'center';
+        analyzeBtn.style.alignItems = 'center';
+        
+        // Disable/enable date inputs
+        startDateInput.disabled = isLoading;
+        endDateInput.disabled = isLoading;
+        
+        // Add/remove disabled styling
+        if (isLoading) {
+            startDateInput.classList.add('disabled-input');
+            endDateInput.classList.add('disabled-input');
+        } else {
+            startDateInput.classList.remove('disabled-input');
+            endDateInput.classList.remove('disabled-input');
+        }
+    }
+    
+    // Single function to handle all initialization
+    function initializeApp() {
+        console.log('Initializing application...');
+        
+        if (isInitialized) {
+            console.log('App already initialized, skipping...');
+            return;
+        }
+        isInitialized = true;
+        
+        // 이벤트 리스너 중복 등록 방지를 위한 객체
+        const eventListeners = new Map();
+        
+        // 이벤트 리스너를 안전하게 추가하는 헬퍼 함수
+        function addEventListenerSafe(element, event, handler) {
+            if (!eventListeners.has(element)) {
+                eventListeners.set(element, new Map());
+            }
+            const elementListeners = eventListeners.get(element);
+            
+            // 기존 핸들러 제거
+            if (elementListeners.has(event)) {
+                const { handler: oldHandler, options } = elementListeners.get(event);
+                element.removeEventListener(event, oldHandler, options);
+            }
+            
+            // 새 핸들러 등록
+            element.addEventListener(event, handler);
+            elementListeners.set(event, { handler, options: false });
+            
+            console.log(`Added event listener for ${event} on`, element);
+        }
+        
+        try {
+            // Set up date inputs first
+            setupDateInputs();
+            
+            // Set up analyze button click handler
+            const analyzeBtn = document.getElementById('analyze-btn');
+            if (analyzeBtn) {
+                // Clear any existing event listeners by cloning the button
+                const newAnalyzeBtn = analyzeBtn.cloneNode(true);
+                analyzeBtn.parentNode.replaceChild(newAnalyzeBtn, analyzeBtn);
+                
+                // Function to handle the analysis
+                const handleAnalysis = (e) => {
+                    if (e) e.preventDefault();
+                    console.log('Analysis triggered' + (e ? ' (button click)' : ' (initial load)'));
+                    
+                    // 이미 분석 중인 경우 중복 호출 방지
+                    if (isAnalyzing) {
+                        console.log('Analysis already in progress');
+                        return;
+                    }
+                    
+                    setAnalyzeButtonLoading(true);
+                    
+                    // fetchLeverageData 호출
+                    fetchLeverageData()
+                        .then(data => {
+                            // 데이터 업데이트 후 로딩 상태 해제
+                            updateChart(data);
+                            updateLeverageInfo(data);
+                        })
+                        .catch(error => {
+                            console.error('Error in fetchLeverageData:', error);
+                            alert('데이터를 가져오는 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'));
+                        })
+                        .finally(() => {
+                            setAnalyzeButtonLoading(false);
+                        });
+                };
+                
+                // Add click handler for manual analysis using our safe method
+                addEventListenerSafe(newAnalyzeBtn, 'click', handleAnalysis);
+                
+                // 초기 데이터 로드 시 호출
+                if (isFirstLoad) {
+                    console.log('Performing initial data load...');
+                    isFirstLoad = false;
+                    
+                    // Add a small delay to ensure the UI is fully rendered
+                    setTimeout(() => {
+                        console.log('Starting initial data fetch...');
+                        handleAnalysis();
+                    }, 100);
+                }
+            } else {
+                console.error('Analyze button not found');
+            }
+            
+            // QQQ toggle button has been removed as we're not showing QQQ data anymore
+            const toggleQQQBtn = document.getElementById('toggleQQQ');
+            if (toggleQQQBtn) {
+                // Show the toggle button
+                toggleQQQBtn.style.display = 'flex';
+            }
+            
+            // Perform initial data load
+            console.log('Initializing application with default data...');
+            isFirstLoad = false;
+            
+            // Small delay to allow UI to render
+            setTimeout(() => {
+                fetchLeverageData()
+                    .catch(error => {
+                        console.error('Error in initial data load:', error);
+                        alert('초기 데이터 로딩 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류'));
+                    });
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error initializing app:', error);
+            alert('앱 초기화 중 오류가 발생했습니다: ' + error.message);
+        }
+    }
 
     // 날짜 입력 필드 설정
     function setupDateInputs() {
-        const startDateInput = document.getElementById('start-date');
-        const endDateInput = document.getElementById('end-date');
-
-        // 날짜 입력 필드의 최소값 설정 (QQQ 시작일)
-        startDateInput.min = formatDateForInput(QQQ_START_DATE);
-        endDateInput.min = formatDateForInput(QQQ_START_DATE);
-
-        // 기본값 설정 (최근 6개월 또는 TQQQ 시작일 이후)
-        const today = getKoreaDate();
-        let defaultEndDate = new Date(today);
-        defaultEndDate.setDate(today.getDate() - 1); // 어제 날짜까지
-
-        let defaultStartDate = new Date(defaultEndDate);
-        defaultStartDate.setMonth(defaultStartDate.getMonth() - 6); // 6개월 전
-
-        // 시작일이 TQQQ 시작일 이전이면 TQQQ 시작일로 설정
-        if (defaultStartDate < TQQQ_START_DATE) {
-            defaultStartDate = new Date(TQQQ_START_DATE);
-        }
-
-        // 날짜 입력 필드에 기본값 설정
-        startDateInput.valueAsDate = defaultStartDate;
-        endDateInput.valueAsDate = defaultEndDate;
-
-        // 날짜 변경 이벤트 리스너 추가
-        startDateInput.addEventListener('change', function() {
-            const startDate = new Date(this.value);
-            const endDate = new Date(endDateInput.value);
-
-            // 시작일이 종료일보다 이후인 경우 조정
-            if (startDate > endDate) {
-                const newEndDate = new Date(startDate);
-                newEndDate.setDate(startDate.getDate() + 30); // 30일 후로 설정
-                endDateInput.valueAsDate = newEndDate;
+        console.log('setupDateInputs called');
+        try {
+            // 날짜 입력 요소 가져오기
+            const startDateInput = document.getElementById('start-date');
+            const endDateInput = document.getElementById('end-date');
+            
+            if (!startDateInput || !endDateInput) {
+                throw new Error('날짜 입력 필드를 찾을 수 없습니다.');
             }
-        });
-    }
+            
+            console.log('Date input elements found');
+            
+            // 오늘 날짜 (한국 시간 기준)
+            const today = getKoreaDate();
+            console.log('Today (Korea time):', today);
+            
+            // Set end date to yesterday
+            const defaultEndDate = new Date(today);
+            defaultEndDate.setDate(today.getDate() - 1);
+            
+            // Set start date to 6 months ago from today
+            const defaultStartDate = new Date(today);
+            defaultStartDate.setMonth(today.getMonth() - 6);
+            
+            // Ensure start date is not before TQQQ start date
+            if (defaultStartDate < TQQQ_START_DATE) {
+                defaultStartDate.setTime(TQQQ_START_DATE.getTime());
+                console.log('Adjusted start date to TQQQ start date:', defaultStartDate);
+            }
+            
+            // Ensure end date is not in the future
+            if (defaultEndDate > today) {
+                defaultEndDate.setTime(today.getTime());
+                defaultEndDate.setDate(today.getDate() - 1);
+            }
+            
+            // 날짜 형식 변환 (YYYY-MM-DD)
+            const formatDateForInput = (date) => {
+                if (!(date instanceof Date) || isNaN(date)) {
+                    console.error('Invalid date:', date);
+                    return '';
+                }
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            
+            // 최소 날짜 설정 (QQQ 시작일)
+            const qqqStartDateStr = formatDateForInput(QQQ_START_DATE);
+            startDateInput.min = qqqStartDateStr;
+            endDateInput.min = qqqStartDateStr;
+            
+            // 기본값 설정
+            const startDateStr = formatDateForInput(defaultStartDate);
+            const endDateStr = formatDateForInput(defaultEndDate);
+            
+            startDateInput.value = startDateStr;
+            endDateInput.value = endDateStr;
+            
+            console.log('Default date range set:', {
+                start: startDateStr,
+                end: endDateStr
+            });
+            
+            // Date change handler - just log the change
+            const handleDateChange = debounce(() => {
+                console.log('날짜가 변경되었습니다. "분석하기" 버튼을 클릭해주세요.');
+            }, 300);
 
-    // 페이지 로드 시 초기 설정
-    document.addEventListener('DOMContentLoaded', function() {
-        setupDateInputs();
-        fetchLeverageData();
-    });
+            // 시작일 변경 이벤트 핸들러
+            startDateInput.addEventListener('change', function() {
+                try {
+                    const startDate = new Date(this.value);
+                    const endDate = new Date(endDateInput.value);
+                    
+                    // 날짜 유효성 검사
+                    if (startDate > endDate) {
+                        endDateInput.value = this.value;
+                    }
+                    
+                    // Just notify about the date change
+                    handleDateChange();
+                } catch (error) {
+                    console.error('날짜 처리 중 오류 발생:', error);
+                }
+            });
+
+            // 종료일 변경 이벤트 핸들러
+            endDateInput.addEventListener('change', function() {
+                try {
+                    const startDate = new Date(startDateInput.value);
+                    const endDate = new Date(this.value);
+                    
+                    // 날짜 유효성 검사
+                    if (endDate < startDate) {
+                        startDateInput.value = this.value;
+                    }
+                    
+                    // Just notify about the date change
+                    handleDateChange();
+                } catch (error) {
+                    console.error('날짜 처리 중 오류 발생:', error);
+                }
+            });
+            
+            // 디바운스 유틸리티 함수
+            function debounce(func, wait) {
+                let timeout;
+                return function() {
+                    const context = this;
+                    const args = arguments;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            }
+            
+        } catch (error) {
+            console.error('날짜 입력 필드 설정 중 오류 발생:', error);
+        }
+    }
 </script>
-</body>
+
 </html>

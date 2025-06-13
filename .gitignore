@@ -48,7 +48,16 @@ config.py
 .DS_Store
 .DS_Store?
 ._*
+
+# Docker
+.dockerignore
+Dockerfile
+.docker/
+*.tar
+docker-compose.override.yml
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Thumbs.db
+/docker-compose.yml
+

@@ -17,7 +17,7 @@ tf.autograph.set_verbosity(1)
 
 # Flask 앱 로깅 설정
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -167,25 +167,35 @@ def create_features(df):
 # 시퀀스 준비
 def prepare_sequences(df, seq_length):
     try:
-        print("시퀀스 준비 시작")
+        print(f"시퀀스 준비 시작 (요청된 시퀀스 길이: {seq_length}일)")
         with open('model_input_features.json', 'r') as f:
             feature_info = json.load(f)
 
         selected_features = feature_info['features']
         missing_features = [f for f in selected_features if f not in df.columns]
         if missing_features:
-            raise KeyError(f"누락된 입력 특성: {missing_features}")
+            print(f"경고: 일부 특성이 누락되어 기본값(0)으로 채웁니다: {missing_features}")
+            for f in missing_features:
+                df[f] = 0.0
 
-        X, dates = [], []
-        for i in range(len(df) - seq_length):
-            X.append(df[selected_features].iloc[i:i + seq_length].values)
-            dates.append(df.index[i + seq_length])
+        # 사용 가능한 데이터가 충분한지 확인
+        if len(df) <= seq_length:
+            # 사용 가능한 모든 데이터를 사용하여 하나의 시퀀스 생성
+            X = [df[selected_features].iloc[-seq_length-1:-1].values]  # 마지막 시퀀스만 사용
+            dates = [df.index[-1]]  # 마지막 날짜 사용
+            print(f"경고: 데이터가 충분하지 않아 {len(X[0])}일의 시퀀스로 조정됨")
+        else:
+            # 정상적인 경우: 모든 가능한 시퀀스 생성
+            X, dates = [], []
+            for i in range(len(df) - seq_length):
+                X.append(df[selected_features].iloc[i:i + seq_length].values)
+                dates.append(df.index[i + seq_length])
 
-        print("시퀀스 준비 완료")
-        return np.array(X), np.array(dates), df.iloc[seq_length:]
+        print(f"시퀀스 준비 완료 (생성된 시퀀스 수: {len(X)}개)")
+        return np.array(X), np.array(dates), df.iloc[-len(X):] if len(X) > 0 else df
     except Exception as e:
         print(f"시퀀스 준비 오류: {e}")
-        return np.array([]), np.array([]), df.iloc[seq_length:]
+        return np.array([]), np.array([]), df
 
 @app.route('/')
 def index():
@@ -201,8 +211,42 @@ def calculate_cumulative_returns(returns, initial_value=100):
     Returns:
         초기 투자금을 기준으로 한 누적 가치 시리즈
     """
-    returns = pd.Series(returns).fillna(0)  # NaN을 0으로 대체
-    return initial_value * (1 + returns).cumprod()
+    if returns.empty:
+        return pd.Series([initial_value])
+        
+    # 누적 수익률 계산 (1 + 수익률)의 누적곱에 초기값 곱하기
+    cumulative = (1 + returns).cumprod() * initial_value
+    
+    # 첫 날의 값을 초기값으로 설정
+    cumulative.iloc[0] = initial_value
+    
+    return cumulative
+
+def normalize_to_hundred(series, base_date=None):
+    """시계열 데이터를 특정 날짜 기준으로 100으로 정규화합니다.
+    
+    Args:
+        series: 정규화할 pandas Series (날짜 인덱스 필요)
+        base_date: 기준이 되는 날짜 (없을 경우 첫 날짜 사용)
+        
+    Returns:
+        기준 날짜를 100으로 정규화된 시계열 데이터
+    """
+    if series.empty:
+        return series
+        
+    if base_date is None:
+        base_value = series.iloc[0]
+    else:
+        base_value = series[base_date]
+    
+    # 기준값이 0이면 1로 대체하여 0으로 나누기 방지
+    base_value = base_value if base_value != 0 else 1
+    
+    # 정규화 (기준값 대비 비율 계산 후 100 곱하기)
+    normalized = (series / base_value) * 100
+    
+    return normalized
 
 @app.route('/api/test', methods=['GET'])
 def test_endpoint():
@@ -257,8 +301,14 @@ def analyze():
         
         # Add buffer for sequence length
         fetch_start_date = start_date - pd.Timedelta(weeks=4)
+        # 종료일에 하루를 더해 해당 일자까지 포함하도록 함
         fetch_end_date = end_date + pd.Timedelta(days=1)
-        logger.debug(f"데이터 요청 기간 (버퍼 포함): {fetch_start_date} ~ {fetch_end_date}")
+        
+        # 실제 요청된 날짜 범위 저장 (나중에 결과 필터링에 사용)
+        requested_start = start_date
+        requested_end = end_date
+        
+        logger.debug(f"데이터 요청 기간 (버퍼 포함): {fetch_start_date.date()} ~ {fetch_end_date.date()}")
         
         # Download data
         tickers = ["QQQ", "TQQQ", "^VIX", "^IRX", "^TNX"]
@@ -275,34 +325,11 @@ def analyze():
         logger.debug(f"데이터 열: {data.columns.tolist()}")
         logger.debug(f"데이터 샘플:\n{data.head(2).to_string()}")
         
-        # Rest of your existing code...
-        
-        # 날짜 파라미터가 없으면 기본값으로 최근 2년 데이터 사용
-        if not start_date_str or not end_date_str:
-            end_date = datetime.now()
-            start_date = end_date - pd.DateOffset(years=2)
-            logger.info(f"날짜 파라미터가 없어 기본값 사용: {start_date.date()} ~ {end_date.date()}")
-        else:
-            try:
-                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                # 종료일에 하루를 더해 해당 일자까지 포함하도록 함
-                end_date = end_date + pd.Timedelta(days=1)
-                logger.info(f"사용자 지정 날짜 범위: {start_date.date()} ~ {end_date.date()}")
-            except Exception as e:
-                logger.warning(f"날짜 파싱 오류: {e}, 기본값으로 대체")
-                end_date = datetime.now()
-                start_date = end_date - pd.DateOffset(years=2)
-        
-        # 실제 요청된 날짜 범위 저장 (나중에 결과 필터링에 사용)
-        requested_start = start_date
-        requested_end = end_date - pd.Timedelta(days=1)  # 하루 전으로 조정 (위에서 하루 더했으므로)
-        
-        # 시퀀스 생성을 위해 시작일에서 시퀀스 길이 + 여유분(2주)을 더한 데이터를 가져옴
-        fetch_start_date = start_date - pd.Timedelta(weeks=4)
-        logger.debug(f"데이터 요청 범위: {fetch_start_date.date()} ~ {end_date.date()} (시퀀스 길이 {seq_length}일 + 여유분 고려)")
-        
-        tickers = ["QQQ", "TQQQ", "^VIX", "^IRX", "^TNX"]
+        # 데이터가 비어있는 경우 에러 반환
+        if len(data) == 0:
+            error_msg = f"선택한 기간({start_date.date()} ~ {end_date.date()})에 해당하는 데이터가 없습니다."
+            logger.error(error_msg)
+            return jsonify({'error': error_msg}), 404
 
         logger.info(f"yfinance 데이터 다운로드 시작: {tickers}, {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         data = yf.download(tickers, start=start_date, end=end_date, progress=False)
@@ -353,10 +380,79 @@ def analyze():
             if f not in df.columns:
                 df[f] = 0.0
                 
-        # 데이터가 충분한지 확인 (시퀀스 길이 + 예측 기간)
-        min_required_days = seq_length + 1
-        if len(df) < min_required_days:
-            raise ValueError(f"데이터가 충분하지 않습니다. 최소 {min_required_days}일의 데이터가 필요하지만, {len(df)}일의 데이터만 있습니다.")
+        # 모델이 요구하는 최소 일수 (10일) 확인
+        min_required_days = seq_length
+        available_days = len(df)
+        
+        if available_days < min_required_days:
+            # 부족한 일수 계산 (최소 요구일수와 현재 일수 차이 + 주말/공휴일 대비 5일 여유분 추가)
+            days_needed = max(min_required_days - available_days + 5, 10)  # 최소 10일은 확보
+            # 시작 날짜를 더 이전으로 조정 (최대 1년 이내로 제한)
+            max_lookback = (pd.to_datetime('today') - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
+            new_start_date = max(
+                (pd.to_datetime(start_date) - pd.Timedelta(days=days_needed)).strftime('%Y-%m-%d'),
+                max_lookback
+            )
+            
+            logger.info(f"데이터가 부족합니다. {min_required_days}일의 거래일 데이터를 위해 {new_start_date}부터 데이터를 요청합니다.")
+            
+            # 기존의 데이터 다운로드 로직을 사용하여 데이터 다시 다운로드
+            try:
+                logger.info(f"yfinance 데이터 다운로드 시작: {tickers}, {new_start_date} to {end_date}")
+                data = yf.download(tickers, start=new_start_date, end=end_date, progress=False)
+                
+                if data.empty:
+                    raise ValueError("다운로드된 데이터가 비어 있습니다.")
+                
+                # 다운로드된 데이터 처리
+                df = pd.DataFrame()
+                for ticker in tickers:
+                    if ticker == "^VIX":
+                        df['VIX_Close'] = data['Close'][ticker]
+                    elif ticker == "^IRX":
+                        df['IRX_Close'] = data['Close'][ticker]
+                    elif ticker == "^TNX":
+                        df['TNX_Close'] = data['Close'][ticker]
+                    else:
+                        df[f'{ticker}_Open'] = data['Open'][ticker]
+                        df[f'{ticker}_High'] = data['High'][ticker]
+                        df[f'{ticker}_Low'] = data['Low'][ticker]
+                        df[f'{ticker}_Close'] = data['Close'][ticker]
+                        df[f'{ticker}_Volume'] = data['Volume'][ticker]
+                
+                df.index = pd.to_datetime(df.index)
+                available_days = len(df)
+                
+                if available_days < min_required_days:
+                    raise ValueError(
+                        f"최소 {min_required_days}일의 거래일 데이터가 필요합니다.\n"
+                        f"요청 기간: {new_start_date} ~ {end_date}\n"
+                        f"확보된 데이터: {available_days}일 ({df.index[0].date()} ~ {df.index[-1].date()})\n"
+                        "더 긴 기간으로 다시 시도해주세요."
+                    )
+                
+                logger.info(f"총 {available_days}일치 데이터 확보 완료 ({df.index[0].date()} ~ {df.index[-1].date()})")
+                
+                # 특성 재생성
+                logger.info("추가 데이터에 대한 특성 생성 시작")
+                df = create_features(df)
+                
+                # 누락된 특성이 있으면 0으로 채우기
+                with open('model_input_features.json', 'r') as f:
+                    feature_info = json.load(f)
+                required_features = feature_info['features']
+                for f in required_features:
+                    if f not in df.columns:
+                        df[f] = 0.0
+                        logger.warning(f"누락된 특성을 기본값(0)으로 채웁니다: {f}")
+                
+                logger.info("추가 데이터에 대한 특성 생성 완료")
+                
+            except Exception as e:
+                logger.error(f"데이터 다운로드 중 오류 발생: {str(e)}")
+                raise ValueError(f"데이터를 가져오는 중 오류가 발생했습니다: {str(e)}")
+        
+        # 원본 시퀀스 길이(10일) 유지
 
         X_seq, dates, recent_df = prepare_sequences(df, seq_length)
         if X_seq.size == 0:
@@ -442,14 +538,9 @@ def analyze():
             predicted_returns = qqq_x_leverage - result_df['total_funding_cost']
             logger.debug(f"5. (QQQ*레버리지 - 자금조달비용): {[f'{x:.6f}' for x in predicted_returns.head(5).tolist()]}")
             
-            # 3배 레버리지 QQQ 누적 수익률 (비교용)
-            qqq_3x_returns = result_df['qqq_return'] * 3.0
-            cumulative_qqq_3x = calculate_cumulative_returns(qqq_3x_returns, initial_value)
-            
             # 주요 결과만 INFO 레벨로 로깅
             logger.info(f"최종 누적 수익률 - 실제 TQQQ: {cumulative_tqqq.tail(1).values[0]:.2f}, "
-                      f"예측 TQQQ: {cumulative_predicted.tail(1).values[0]:.2f}, "
-                      f"3배 QQQ: {cumulative_qqq_3x.tail(1).values[0]:.2f}")
+                      f"예측 TQQQ: {cumulative_predicted.tail(1).values[0]:.2f}")
             
         except Exception as e:
             logger.error(f"누적 수익률 계산 중 오류 발생: {str(e)}")
@@ -457,25 +548,62 @@ def analyze():
                 logger.error(f"데이터 타입 - tqqq_return: {type(actual_tqqq_returns.iloc[0]) if len(actual_tqqq_returns) > 0 else 'empty'}")
             if 'predicted_returns' in locals():
                 logger.error(f"데이터 타입 - predicted_returns: {type(predicted_returns.iloc[0]) if len(predicted_returns) > 0 else 'empty'}")
-            if 'qqq_3x_returns' in locals():
-                logger.error(f"데이터 타입 - qqq_3x_returns: {type(qqq_3x_returns.iloc[0]) if len(qqq_3x_returns) > 0 else 'empty'}")
+
             
             # 오류 발생 시 초기값으로 채운 시리즈 반환
             cumulative_tqqq = pd.Series([initial_value] * len(result_df))
             cumulative_predicted = pd.Series([initial_value] * len(result_df))
-            cumulative_qqq_3x = pd.Series([initial_value] * len(result_df))
 
-        # 결과 딕셔너리 생성
+        # 시작일 기준으로 100으로 정규화
+        start_date = result_df.index[0]
+        
+        # 실제 TQQQ 가격 정규화
+        normalized_tqqq = normalize_to_hundred(result_df['TQQQ_Close'], start_date)
+        
+        # 예측 TQQQ 가격 정규화 (누적 수익률을 사용)
+        predicted_returns = result_df['qqq_return'] * result_df['predicted_leverage']
+        predicted_cumulative = (1 + predicted_returns).cumprod() * 100
+        normalized_predicted = pd.Series(predicted_cumulative, index=result_df.index)
+        
+        # 디버깅 로그 추가
+        logger.debug(f"예측 레버리지 통계 - 최소: {result_df['predicted_leverage'].min():.4f}, "
+                   f"최대: {result_df['predicted_leverage'].max():.4f}, "
+                   f"평균: {result_df['predicted_leverage'].mean():.4f}")
+        
+        # 누적 수익률 계산 디버깅
+        logger.debug(f"QQQ 수익률: {result_df['qqq_return'].head(5).values}")
+        logger.debug(f"예측 레버리지: {result_df['predicted_leverage'].head(5).values}")
+        logger.debug(f"자금 조달 비용: {result_df['total_funding_cost'].head(5).values}")
+        
+        # 2010년 2월 11일(TQQQ 상장일) 이전 데이터는 실제 TQQQ 데이터 제거
+        tqqq_inception_date = pd.to_datetime('2010-02-11')
+        
+        # 실제 TQQQ 데이터가 없는 날짜는 None으로 설정
+        actual_tqqq_list = []
+        for date, value in zip(result_df.index, result_df['TQQQ_Close'].tolist()):
+            if pd.to_datetime(date) < tqqq_inception_date:
+                actual_tqqq_list.append(None)
+            else:
+                actual_tqqq_list.append(value)
+                
+        # 누적 수익률도 동일하게 처리
+        cumulative_actual_list = []
+        for date, value in zip(result_df.index, cumulative_tqqq.tolist()):
+            if pd.to_datetime(date) < tqqq_inception_date:
+                cumulative_actual_list.append(None)
+            else:
+                cumulative_actual_list.append(value)
+
+        # 결과 딕셔너리 생성 (중복 제거 및 일관된 데이터 전달)
         result = {
             'dates': [d.strftime('%Y-%m-%d') for d in result_df.index],
+            'actual_qqq': convert_nan_to_none(result_df['QQQ_Close'].tolist()),
+            'actual_tqqq': convert_nan_to_none(actual_tqqq_list),  # 수정된 실제 TQQQ 데이터 사용
+            'vix': convert_nan_to_none(result_df['VIX_Close'].tolist()),
             'actual_leverage': convert_nan_to_none(result_df['leverage_ratio'].tolist()),
             'predicted_leverage': convert_nan_to_none(result_df['predicted_leverage'].tolist()),
-            'actual_qqq': convert_nan_to_none(result_df['QQQ_Close'].tolist()),
-            'actual_tqqq': convert_nan_to_none(result_df['TQQQ_Close'].tolist()),
-            'vix': convert_nan_to_none(result_df['VIX_Close'].tolist()),
-            'cumulative_actual': convert_nan_to_none(cumulative_tqqq.tolist()),
-            'cumulative_predicted': convert_nan_to_none(cumulative_predicted.tolist()),
-            'cumulative_qqq_3x': convert_nan_to_none(cumulative_qqq_3x.tolist())
+            'cumulative_actual': convert_nan_to_none(cumulative_actual_list),  # 수정된 누적 실제 수익률 사용
+            'cumulative_predicted': convert_nan_to_none(cumulative_predicted.tolist())
         }
 
         logger.info("API 응답 준비 완료")
