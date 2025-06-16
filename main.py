@@ -99,15 +99,11 @@ def load_models():
         print("="*50 + "\n")
         raise  # Re-raise the exception to be handled by the caller
 
-# 전역 변수로 모델 로드
-try:
-    model, scaler, features, seq_length = load_models()
-except Exception as e:
-    print("프로그램을 계속 실행할 수 없습니다. 필요한 모델 파일이 있는지 확인해주세요.")
-    model = None
-    scaler = None
-    features = []
-    seq_length = 30
+# 전역 변수로 모델, 스케일러, 특성, 시퀀스 길이 선언 (초기값 None)
+model = None
+scaler = None
+features = []
+seq_length = 30
 
 # 특성 생성 함수
 def create_features(df):
@@ -518,4 +514,15 @@ def analyze():
         }), 500
 
 if __name__ == '__main__':
+    # 모델 로드를 실제 Flask 앱 프로세스에서 한 번만 수행하도록 설정
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        try:
+            model, scaler, features, seq_length = load_models()
+        except Exception as e:
+            print("프로그램을 계속 실행할 수 없습니다. 필요한 모델 파일이 있는지 확인해주세요.")
+            model = None
+            scaler = None
+            features = []
+            seq_length = 30
+
     app.run(debug=True)
