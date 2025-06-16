@@ -28,7 +28,7 @@ It utilizes a deep learning model trained in [LeverageGenerator](https://github.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/tqqq-leverage-analyzer.git
+git clone https://github.com/Lacri1/tqqq-leverage-analyzer.git
 cd tqqq-leverage-analyzer
 ```
 
