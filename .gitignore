@@ -49,18 +49,71 @@ config.py
 .DS_Store?
 ._*
 
-# Docker files - explicitly include
-!.dockerignore
-!Dockerfile
-!docker-compose.yml
-!kubernetes/
-!kubernetes/*
+# ===== Docker =====
+# Docker Compose
+/docker-compose.override.yml
 
-# Docker ignore
+# Docker build
+.dockerignore
+Dockerfile
 .docker/
+
+# Container volumes
 *.tar
-docker-compose.override.yml
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+*.tar.gz
+
+# Kubernetes
+/kubernetes/*.yaml
+!/kubernetes/example-*.yaml
+/kubernetes/secrets/
+/kubernetes/overlays/
+/kubernetes/kustomization.yaml
+
+# Kubernetes temp files
+*.tmp
+*.swp
+*.swo
+
+# Kubernetes secrets
+*-secret.yaml
+*-credentials.yaml
+
+# Kubernetes kustomization
+/kustomization/
+/kustomize/
+
+# Minikube
+.minikube/
+
+# Kompose
+*.kompose.yaml
+
+# Helm
+**/charts/
+*.tgz
+.helm/
+
+# Tilt
+.tiltbuild/
+
+# Skaffold
+.skaffold/
+
+# Telepresence
+.telepresence/
+
+# Docker Compose
+**/docker-compose.*.yml
+**/docker-compose.*.yaml
+
+# Local development
+.local/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
