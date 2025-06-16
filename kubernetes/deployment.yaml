@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leverage-analyzer-deployment
+  labels:
+    app: leverage-analyzer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: leverage-analyzer
+  template:
+    metadata:
+      labels:
+        app: leverage-analyzer
+    spec:
+      containers:
+      - name: leverage-analyzer
+        image: 842609633443.dkr.ecr.ap-northeast-2.amazonaws.com/leverage-analyzer:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 5000
+        env:
+        - name: FLASK_ENV
+          value: "production" 

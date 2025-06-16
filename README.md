@@ -86,6 +86,95 @@ This application uses the following model files:
 
 For more details about the model, please refer to the [LeverageGenerator](https://github.com/Lacri1/LeverageGenerator) repository.
 
+## Deployment
+
+### AWS EKS Deployment
+
+This application can be deployed on AWS Elastic Kubernetes Service (EKS). Here's a general overview of the steps involved:
+
+1.  **Prepare Docker Image**
+    -   Build your Docker image:
+        ```bash
+        docker build -t leverage-analyzer:latest .
+        ```
+    -   Authenticate Docker to your Amazon ECR registry:
+        ```bash
+        aws ecr get-login-password --region <your-region> | docker login --username AWS --password-stdin <your-account-id>.dkr.ecr.<your-region>.amazonaws.com
+        ```
+    -   Tag your image for ECR:
+        ```bash
+        docker tag leverage-analyzer:latest <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/leverage-analyzer:latest
+        ```
+    -   Push the image to ECR:
+        ```bash
+        docker push <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/leverage-analyzer:latest
+        ```
+
+2.  **Set Up AWS EKS Cluster**
+    -   Create an EKS cluster (e.g., using `eksctl` or AWS Console).
+    -   Configure `kubectl` to connect to your EKS cluster.
+
+3.  **Deploy to EKS**
+    -   Create Kubernetes deployment and service YAML files (e.g., `deployment.yaml`, `service.yaml`).
+        *Example `deployment.yaml` (simplified):*
+        ```yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: leverage-analyzer-deployment
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: leverage-analyzer
+          template:
+            metadata:
+              labels:
+                app: leverage-analyzer
+            spec:
+              containers:
+              - name: leverage-analyzer
+                image: <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/leverage-analyzer:latest
+                ports:
+                - containerPort: 5000
+        ```
+        *Example `service.yaml` (simplified for LoadBalancer):*
+        ```yaml
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: leverage-analyzer-service
+        spec:
+          selector:
+            app: leverage-analyzer
+          type: LoadBalancer
+          ports:
+            - protocol: TCP
+              port: 80
+              targetPort: 5000
+        ```
+    -   Apply the Kubernetes configurations:
+        ```bash
+        kubectl apply -f deployment.yaml
+        kubectl apply -f service.yaml
+        ```
+
+4.  **Verify Deployment**
+    -   Check the status of your pods:
+        ```bash
+        kubectl get pods
+        ```
+    -   Get the external URL of your service:
+        ```bash
+        kubectl get service leverage-analyzer-service
+        ```
+    -   Access the application via the provided external URL.
+
+### Service Verification
+
+![AWS Deployment Verification](assets/AWS.png)
+*Screenshot showing successful deployment on AWS*
+
 ## License
 
 This project is licensed under the MIT License.

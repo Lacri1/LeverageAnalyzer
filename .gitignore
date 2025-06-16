@@ -49,56 +49,6 @@ config.py
 .DS_Store?
 ._*
 
-# ===== Docker =====
-# Docker Compose
-/docker-compose.override.yml
-
-# Docker build
-.dockerignore
-Dockerfile
-.docker/
-
-# Container volumes
-*.tar
-*.tar.gz
-
-# Kubernetes
-/kubernetes/*.yaml
-!/kubernetes/example-*.yaml
-/kubernetes/secrets/
-/kubernetes/overlays/
-/kubernetes/kustomization.yaml
-
-# Kubernetes temp files
-*.tmp
-*.swp
-*.swo
-
-# Kubernetes secrets
-*-secret.yaml
-*-credentials.yaml
-
-# Kubernetes kustomization
-/kustomization/
-/kustomize/
-
-# Minikube
-.minikube/
-
-# Kompose
-*.kompose.yaml
-
-# Helm
-**/charts/
-*.tgz
-.helm/
-
-# Tilt
-.tiltbuild/
-
-# Skaffold
-.skaffold/
-
 # Telepresence
 .telepresence/
 

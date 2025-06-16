@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Local development settings
+.env.local
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Project specific
+*.h5
+*.joblib
+
+# Ignore Python specific files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+virtualenv/
+venv/
+env/
+
+# Ignore IDE files
+.idea/
+.vscode/
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore documentation and markdown files
+*.md
+LICENSE
+
+# Ignore large or unnecessary data files (adjust as needed)
+*.npy
+*.npz
+*.csv
+*.h5
+
+# Exclude specific model files if they are needed in the image and blanket rules would ignore them
+# If your Dockerfile explicitly COPIES these, you don't need to 'unignore' them here.
+# But for general safety, ensure critical files are not ignored if using 'COPY . /app'
+# !leverage_model.keras
+# !leverage_scaler.pkl
+# !model_input_features.json

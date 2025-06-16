@@ -382,7 +382,7 @@
             sampledActualReturns.push(actualReturns[actualReturns.length - 1]);
             sampledPredictedReturns.push(predictedReturns[predictedReturns.length - 1]);
             sampledQQQCumulative.push(qqqCumulative[qqqCumulative.length - 1]);
-        }
+            }
 
         console.log(`Sampled data from ${dates.length} to ${sampledDates.length} points`);
 
@@ -565,7 +565,7 @@
             errorElement.textContent = '차트를 생성하는 중 오류가 발생했습니다: ' + error.message;
             chartElement.parentNode.insertBefore(errorElement, chartElement.nextSibling);
         }
-    }
+        }
 
     // 날짜 포맷팅 함수
     function formatDate(dateString) {
@@ -592,7 +592,7 @@
                     (avgLeverage ? avgLeverage.toFixed(2) : 'N/A');
             }
         }
-        
+
         // 날짜 범위 정보 업데이트 (API 응답에 날짜가 있는 경우)
         const dateInfoElement = document.getElementById('date-range-info');
         if (dateInfoElement && data.dates && data.dates.length > 0) {
