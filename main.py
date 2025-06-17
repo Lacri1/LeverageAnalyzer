@@ -68,11 +68,11 @@ seq_length = 30
 def load_models():
     """Load ML models and return them with status"""
     global model, scaler, features, seq_length
-    
+
     # 이미 로드된 경우 재사용
     if model is not None and scaler is not None:
         return model, scaler, features, seq_length
-        
+
     try:
         print("\n" + "="*50)
         print("모델 및 스케일러 로딩 시작...")
@@ -142,8 +142,8 @@ def create_features(df):
 
         # Ensure fundamental columns exist and have no NaNs before complex calculations
         expected_raw_cols = [
-            f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
-        ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
+                                f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
+                            ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
 
         for col in expected_raw_cols:
             if col not in df.columns:
@@ -228,8 +228,8 @@ def create_features(df):
         try:
             df['vix_regime'] = pd.qcut(vix_for_qcut, q=7, labels=qcut_labels, duplicates='drop')
             if df['vix_regime'].isnull().all():
-                 logger.warning("pd.qcut for vix_regime resulted in all NaNs, filling with default 1.15.")
-                 df['vix_regime'] = 1.15
+                logger.warning("pd.qcut for vix_regime resulted in all NaNs, filling with default 1.15.")
+                df['vix_regime'] = 1.15
         except Exception as qcut_e:
             logger.error(f"Error in pd.qcut for vix_regime: {qcut_e}. Filling with default 1.15.")
             df['vix_regime'] = 1.15
@@ -239,17 +239,17 @@ def create_features(df):
         # Calculate funding costs within a try-except block to ensure total_funding_cost is always present
         try:
             df['funding_cost_base'] = (
-                df['tbill_3m'] * 2 +
-                df['yield_spread'] * 0.15 +
-                df['vix_momentum_5d'].abs() * 0.08 +
-                df['yield_momentum'].abs() * 0.05
-            ) * df['vix_regime']
+                                              df['tbill_3m'] * 2 +
+                                              df['yield_spread'] * 0.15 +
+                                              df['vix_momentum_5d'].abs() * 0.08 +
+                                              df['yield_momentum'].abs() * 0.05
+                                      ) * df['vix_regime']
             df['funding_cost_base'] = df['funding_cost_base'].fillna(0).astype(float) # Ensure funding_cost_base also handles NaNs and is float
 
             df['vix_cost_adj'] = (df['VIX_Close'] / 16) * 0.0001 * (
-                1 + df['vix_term_structure'].abs() +
-                df['vix_momentum_5d'].abs() +
-                df['vix_volatility_ratio']
+                    1 + df['vix_term_structure'].abs() +
+                    df['vix_momentum_5d'].abs() +
+                    df['vix_volatility_ratio']
             )
             df['vix_cost_adj'] = df['vix_cost_adj'].fillna(0).astype(float) # Ensure vix_cost_adj also handles NaNs and is float
 
@@ -441,11 +441,11 @@ def analyze():
         # seq_length는 최소 필요일수이며, 주말/공휴일을 고려하여 추가 버퍼를 둡니다.
         data_fetch_buffer_days = seq_length + 10 # 넉넉하게 10일 버퍼 추가
         fetch_start_date_for_data_download = requested_start - pd.Timedelta(days=data_fetch_buffer_days)
-        
+
         # QQQ 상장일보다 이전으로 가지 않도록 함
         if fetch_start_date_for_data_download < QQQ_INCEPTION_DATE:
             fetch_start_date_for_data_download = QQQ_INCEPTION_DATE
-        
+
         fetch_end_date = requested_end + pd.Timedelta(days=1) # 종료일 포함을 위해 +1일
 
         logger.debug(f"데이터 다운로드 기간: {fetch_start_date_for_data_download.date()} ~ {fetch_end_date.date()}")
@@ -461,7 +461,7 @@ def analyze():
             return jsonify({'error': error_msg}), 500
 
         logger.info(f"데이터 다운로드 완료 - 수신된 포인트 수: {len(data)}")
-        
+
         df = pd.DataFrame()
         for ticker in tickers:
             if ticker == "^VIX":
@@ -483,8 +483,8 @@ def analyze():
         # 모든 필수 원본 컬럼이 존재하는지 확인하고, 없으면 NaN으로 채움
         # 이는 yfinance가 특정 기간에 대한 데이터를 제공하지 않을 때 발생할 수 있음
         expected_raw_cols = [
-            f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
-        ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
+                                f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
+                            ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
 
         for col in expected_raw_cols:
             if col not in df.columns:
@@ -495,7 +495,7 @@ def analyze():
             raise ValueError(f"선택한 기간({requested_start.date()} ~ {requested_end.date()})에 해당하는 데이터가 없습니다.")
 
         logger.info(f"다운로드된 데이터 범위: {df.index[0].date()} ~ {df.index[-1].date()}")
-        
+
         # VIX, IRX, TNX 데이터의 NaN을 처리합니다. 이들은 total_funding_cost 계산에 필수적입니다.
         for col in ['VIX_Close', 'IRX_Close', 'TNX_Close']:
             if col in df.columns:
@@ -506,14 +506,14 @@ def analyze():
                         default_val = 20.0 if 'VIX' in col else 0.01 # VIX는 20, 금리 데이터는 0.01 (1%)로 기본값 설정
                         df[col] = df[col].fillna(df[col].mean() if not df[col].isnull().all() else default_val)
                         if df[col].isnull().any(): # 평균도 NaN인 경우를 대비
-                             df[col] = df[col].fillna(default_val)
+                            df[col] = df[col].fillna(default_val)
                     if initial_nan_count > 0 and df[col].isnull().sum() == 0:
-                         logger.info(f"'{col}'의 {initial_nan_count}개 NaN 값을 채웠습니다.")
+                        logger.info(f"'{col}'의 {initial_nan_count}개 NaN 값을 채웠습니다.")
                     elif df[col].isnull().sum() > 0:
-                         logger.warning(f"'{col}'의 NaN 값을 모두 채우지 못했습니다. {df[col].isnull().sum()}개 남아있습니다.")
+                        logger.warning(f"'{col}'의 NaN 값을 모두 채우지 못했습니다. {df[col].isnull().sum()}개 남아있습니다.")
             else:
                 # 이 경우는 expected_raw_cols 검사에서 이미 잡혔어야 하지만, 혹시 모를 상황 대비
-                df[col] = np.nan 
+                df[col] = np.nan
                 logger.warning(f"'{col}' 컬럼이 최종 df에 없어 NaN으로 초기화합니다. 이어서 NaN 처리됩니다.")
 
         df = create_features(df)
@@ -535,7 +535,7 @@ def analyze():
         df_for_prediction = df[(df.index >= prediction_data_start_for_sequence) & (df.index <= requested_end)].copy()
 
         X_seq, prediction_dates, _ = prepare_sequences(df_for_prediction, seq_length)
-        
+
         if X_seq.size == 0 or len(prediction_dates) == 0:
             logger.warning("예측을 위한 시퀀스 데이터가 부족하거나 없습니다. 기본 레버리지 값으로 대체합니다.")
             df['predicted_leverage'] = 3.0
@@ -568,13 +568,13 @@ def analyze():
 
         qqq_cumulative_base = calculate_cumulative_returns(df['qqq_return'], initial_value=1.0)
         actual_tqqq_cumulative_base = calculate_cumulative_returns(df['tqqq_return'], initial_value=1.0)
-        
+
         predicted_daily_returns = (df['qqq_return'] * df['predicted_leverage']).fillna(0) - df['total_funding_cost'].fillna(0)
         predicted_tqqq_cumulative_base = calculate_cumulative_returns(predicted_daily_returns, initial_value=1.0)
 
         # 차트 표시를 위한 날짜 범위 생성 (매일)
         chart_display_dates = pd.date_range(start=requested_start, end=requested_end, freq='D')
-        
+
         qqq_chart_series = qqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
         actual_tqqq_chart_series = actual_tqqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
         predicted_tqqq_chart_series = predicted_tqqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
@@ -587,7 +587,7 @@ def analyze():
         first_valid_qqq_idx = qqq_chart_series[qqq_chart_series.index >= requested_start].first_valid_index()
         if first_valid_qqq_idx is not None:
             chart_base_date = first_valid_qqq_idx
-        
+
         # 실제 TQQQ 시리즈에서 유효한 첫 번째 인덱스 찾기 (TQQQ 상장일 이후)
         first_valid_actual_tqqq_idx = actual_tqqq_chart_series[(actual_tqqq_chart_series.index >= requested_start) & (actual_tqqq_chart_series.index >= TQQQ_INCEPTION_DATE)].first_valid_index()
         if first_valid_actual_tqqq_idx is not None and (chart_base_date is None or first_valid_actual_tqqq_idx < chart_base_date):
@@ -614,7 +614,7 @@ def analyze():
                 actual_tqqq_output_list.append(None)
             else:
                 actual_tqqq_output_list.append(value)
-        
+
         qqq_output_list = qqq_final_normalized.tolist()
         predicted_tqqq_output_list = predicted_tqqq_final_normalized.tolist()
 
@@ -674,9 +674,15 @@ def analyze():
         }), 500
 
 if __name__ == '__main__':
-    # 개발 환경에서는 debug=True로 실행
-    if os.environ.get('FLASK_ENV') == 'development':
-        app.run(debug=True, host='0.0.0.0')
+    # 환경 변수로 실행 환경 확인
+    if os.environ.get('DOCKER_CONTAINER'):
+        # Docker 환경
+        host = '0.0.0.0'
+    elif os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+        # AWS 환경
+        host = '0.0.0.0'
     else:
-        # 프로덕션 환경에서는 waitress가 실행하므로 여기서는 실행하지 않음
-        pass
+        # 로컬 개발 환경
+        host = '127.0.0.1'
+
+    app.run(debug=True, host=host)

@@ -69,17 +69,17 @@
     // 상수 정의
     const QQQ_START_DATE = new Date('1999-03-10T00:00:00+09:00');
     const TQQQ_START_DATE = new Date('2010-02-11T00:00:00+09:00');
-    
+
     // 요청 캐싱을 위한 변수
     const requestCache = new Map();
     const CACHE_DURATION = 30000; // 30초 동안 캐시 유지
-    
+
     // 요청이 캐시되었는지 확인하는 함수
     function isRequestCached(startDate, endDate) {
         const cacheKey = `${startDate}-${endDate}`;
         const cached = requestCache.get(cacheKey);
         if (!cached) return false;
-        
+
         // 캐시 유효 시간 확인 (30초)
         const now = Date.now();
         if (now - cached.timestamp > CACHE_DURATION) {
@@ -88,7 +88,7 @@
         }
         return true;
     }
-    
+
     // 요청을 캐시에 저장하는 함수
     function cacheRequest(startDate, endDate) {
         const cacheKey = `${startDate}-${endDate}`;
@@ -125,26 +125,26 @@
     function validateDateRange(startDate, endDate) {
         const qqqStart = new Date('1999-03-10T00:00:00+09:00');
         const tqqqStart = new Date('2010-02-11T00:00:00+09:00');
-        
+
         const start = new Date(startDate + 'T00:00:00+09:00');
         const end = new Date(endDate + 'T23:59:59+09:00');
-        
+
         if (isNaN(start.getTime()) || isNaN(end.getTime())) {
             throw new Error('유효한 날짜 형식이 아닙니다. (YYYY-MM-DD)');
         }
-        
+
         if (start < qqqStart) {
             throw new Error(`시작일은 ${formatDate(qqqStart)} 이후로 설정해주세요.`);
         }
-        
+
         if (end > new Date()) {
             throw new Error('종료일은 오늘 이전이어야 합니다.');
         }
-        
+
         if (start > end) {
             throw new Error('종료일은 시작일 이후여야 합니다.');
         }
-        
+
         return { start, end };
     }
 
@@ -162,7 +162,7 @@
 
         // 날짜 유효성 검사
         const dateRange = validateDateRange(startDate, endDate);
-        
+
         if (isRequestCached(startDate, endDate)) {
             console.log('Request already in progress, skipping...');
             return;
@@ -300,7 +300,7 @@
         return { dates: sampledDates, values: sampledValues };
     }
 
-        // 차트 업데이트
+    // 차트 업데이트
     function updateChart(data) {
         if (!data) {
             console.error('No data provided to updateChart');
@@ -382,7 +382,7 @@
             sampledActualReturns.push(actualReturns[actualReturns.length - 1]);
             sampledPredictedReturns.push(predictedReturns[predictedReturns.length - 1]);
             sampledQQQCumulative.push(qqqCumulative[qqqCumulative.length - 1]);
-            }
+        }
 
         console.log(`Sampled data from ${dates.length} to ${sampledDates.length} points`);
 
@@ -408,7 +408,7 @@
         if (!allDataPoints.length) {
             allDataPoints.push(100);
         }
-        
+
         const minValue = Math.min(...allDataPoints);
         const maxValue = Math.max(...allDataPoints);
         const range = maxValue - minValue || 20; // range가 0이면 20으로 설정
@@ -565,7 +565,7 @@
             errorElement.textContent = '차트를 생성하는 중 오류가 발생했습니다: ' + error.message;
             chartElement.parentNode.insertBefore(errorElement, chartElement.nextSibling);
         }
-        }
+    }
 
     // 날짜 포맷팅 함수
     function formatDate(dateString) {
@@ -582,13 +582,13 @@
     // 레버리지 정보 업데이트 함수
     function updateLeverageInfo(data) {
         if (!data) return;
-        
+
         // 레버리지 정보가 있는 경우에만 업데이트
         if (data.leverage_info) {
             const infoElement = document.getElementById('leverage-info');
             if (infoElement) {
                 const avgLeverage = data.leverage_info.average_leverage;
-                infoElement.textContent = '평균 레버리지: ' + 
+                infoElement.textContent = '평균 레버리지: ' +
                     (avgLeverage ? avgLeverage.toFixed(2) : 'N/A');
             }
         }
@@ -619,29 +619,29 @@
         try {
             const today = getKoreaDate();
             const qqqStartDate = new Date('1999-03-10T00:00:00+09:00');
-            
+
             // 6개월 전 날짜 계산 (기본 시작일로 사용)
             const sixMonthsAgo = new Date(today);
             sixMonthsAgo.setMonth(today.getMonth() - 6);
-            
+
             // 시작일과 종료일 입력 필드 가져오기
             const startDateInput = document.getElementById('start-date');
             const endDateInput = document.getElementById('end-date');
-            
+
             // 날짜 입력 필드의 최소/최대값 설정
             startDateInput.min = '1999-03-10';
             startDateInput.max = formatDateForInput(today);
             endDateInput.min = '1999-03-10';
             endDateInput.max = formatDateForInput(today);
-            
+
             // 기본값 설정 (6개월 전부터 어제까지)
             const defaultStartDate = sixMonthsAgo < qqqStartDate ? qqqStartDate : sixMonthsAgo;
             const yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
-            
+
             startDateInput.value = formatDateForInput(defaultStartDate);
             endDateInput.value = formatDateForInput(yesterday);
-            
+
             // 시작일이 변경되면 종료일의 최소값 업데이트
             startDateInput.addEventListener('change', function() {
                 endDateInput.min = this.value;
@@ -649,7 +649,7 @@
                     endDateInput.value = this.value;
                 }
             });
-            
+
             // 종료일이 변경되면 시작일의 최대값 업데이트
             endDateInput.addEventListener('change', function() {
                 startDateInput.max = this.value;
@@ -657,7 +657,7 @@
                     startDateInput.value = this.value;
                 }
             });
-            
+
             // 페이지 로드 시 자동으로 데이터 가져오기
             try {
                 console.log('Loading initial data...');
@@ -665,7 +665,7 @@
             } catch (error) {
                 console.error('Error loading initial data:', error);
             }
-            
+
             // 폼 제출 이벤트 리스너 추가
             const form = document.querySelector('form');
             if (form) {
@@ -678,7 +678,7 @@
                     }
                 });
             }
-            
+
             // 분석하기 버튼 클릭 이벤트 리스너 추가 (폼이 없는 경우 대비)
             const analyzeBtn = document.getElementById('analyze-btn');
             if (analyzeBtn) {
@@ -690,7 +690,7 @@
                     }
                 });
             }
-            
+
             console.log('Initialization complete');
         } catch (error) {
             console.error('Initialization error:', error);
