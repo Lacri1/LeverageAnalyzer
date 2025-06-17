@@ -58,26 +58,14 @@ class OutputScaling(tf.keras.layers.Layer):
         })
         return config
 
-# 전역 변수로 모델, 스케일러, 특성, 시퀀스 길이 선언 (초기값 None)
-model = None
-scaler = None
-features = []
-seq_length = 30
-
-# 모델 로드 함수 수정
 def load_models():
     """Load ML models and return them with status"""
-    global model, scaler, features, seq_length
-
-    # 이미 로드된 경우 재사용
-    if model is not None and scaler is not None:
-        return model, scaler, features, seq_length
-
     try:
         print("\n" + "="*50)
         print("모델 및 스케일러 로딩 시작...")
 
         # Check if model files exist
+        import os
         if not os.path.exists('leverage_model.keras'):
             raise FileNotFoundError("leverage_model.keras 파일을 찾을 수 없습니다.")
         if not os.path.exists('leverage_scaler.pkl'):
@@ -109,175 +97,67 @@ def load_models():
         import traceback
         print(f"에러 상세 정보:\n{traceback.format_exc()}")
         print("="*50 + "\n")
-        raise
+        raise  # Re-raise the exception to be handled by the caller
 
-# Flask 앱 생성
-app = Flask(__name__)
-
-# 앱 시작 시 모델 로드
-print("서버 시작: 모델 로드 시도...")
-try:
-    model, scaler, features, seq_length = load_models()
-    print("서버 시작: 모델 로드 완료")
-except Exception as e:
-    print("서버 시작: 모델 로드 실패")
-    print(f"에러: {str(e)}")
-    model = None
-    scaler = None
-    features = []
-    seq_length = 30
+# 전역 변수로 모델, 스케일러, 특성, 시퀀스 길이 선언 (초기값 None)
+model = None
+scaler = None
+features = []
+seq_length = 30
 
 # 특성 생성 함수
 def create_features(df):
     try:
         logger.debug("특성 생성 시작")
-
-        # 모델이 기대하는 특성 이름으로 원본 데이터 컬럼의 별칭 생성
-        if 'VIX_Close' in df.columns:
-            df['vix'] = df['VIX_Close']
-        if 'TQQQ_Close' in df.columns:
-            df['tqqq_price'] = df['TQQQ_Close']
-        if 'TQQQ_Volume' in df.columns:
-            df['tqqq_vol'] = df['TQQQ_Volume']
-
-        # Ensure fundamental columns exist and have no NaNs before complex calculations
-        expected_raw_cols = [
-                                f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
-                            ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
-
-        for col in expected_raw_cols:
-            if col not in df.columns:
-                df[col] = np.nan
-                logger.warning(f"Feature creation: Raw data column '{col}' missing, adding as NaN.")
-            # Ensure no NaNs propagate from raw data for core calculations
-            # Fill with mean if possible, otherwise a sensible default
-            if df[col].isnull().all():
-                logger.warning(f"Feature creation: Raw data column '{col}' is all NaNs, filling with default value for calculations.")
-                default_val = 20.0 if 'VIX' in col else (0.01 if 'IRX' in col or 'TNX' in col else 100.0) # Sensible defaults
-                df[col] = df[col].fillna(default_val)
-            elif df[col].isnull().any():
-                df[col] = df[col].ffill().bfill() # Fill partial NaNs
-                # After ffill/bfill, if there are still leading/trailing NaNs, fill with mean or default
-                if df[col].isnull().any():
-                    default_val = 20.0 if 'VIX' in col else (0.01 if 'IRX' in col or 'TNX' in col else df[col].mean()) # Use mean or default
-                    df[col] = df[col].fillna(default_val)
-                # Final check to make sure it's numeric
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(default_val)
-
-        # Recalculate basic returns after ensuring core data is solid
-        df['qqq_return'] = df['QQQ_Close'].pct_change().fillna(0).astype(float)
-        df['tqqq_return'] = df['TQQQ_Close'].pct_change().fillna(0).astype(float)
-
-        # Ensure aliases are also filled if original was filled and still missing
-        for alias, original_col in [('vix', 'VIX_Close'), ('tqqq_price', 'TQQQ_Close'), ('tqqq_vol', 'TQQQ_Volume')]:
-            if alias in df.columns and df[alias].isnull().all():
-                logger.warning(f"Feature creation: Alias '{alias}' is all NaNs after mapping, filling with default from original.")
-                default_val = 20.0 if 'VIX' in original_col else (0.01 if 'IRX' in original_col or 'TNX' in original_col else 100.0)
-                df[alias] = df[alias].fillna(default_val)
-            elif alias in df.columns and df[alias].isnull().any():
-                df[alias] = df[alias].ffill().bfill()
-                if df[alias].isnull().any():
-                    default_val = 20.0 if 'VIX' in original_col else (0.01 if 'IRX' in original_col or 'TNX' in original_col else df[alias].mean())
-                    df[alias] = df[alias].fillna(default_val)
-            # Ensure aliases are numeric
-            if alias in df.columns:
-                df[alias] = pd.to_numeric(df[alias], errors='coerce').fillna(df[alias].mean() if not df[alias].isnull().all() else (20.0 if 'VIX' in original_col else 0.01))
-
+        df['qqq_return'] = df['QQQ_Close'].pct_change()
+        df['tqqq_return'] = df['TQQQ_Close'].pct_change()
         df['leverage_ratio'] = df['tqqq_return'] / df['qqq_return']
-        # Handle division by zero for leverage_ratio
-        df.loc[df['qqq_return'] == 0, 'leverage_ratio'] = 3.0 # Set to nominal leverage if QQQ return is zero
-        df['leverage_ratio'] = df['leverage_ratio'].replace([np.inf, -np.inf], 3.0).fillna(3.0)
 
-        df['tqqq_high_low'] = ((df['TQQQ_High'] - df['TQQQ_Low']) / df['TQQQ_Close']).fillna(0).astype(float)
-        df['tqqq_gap'] = (df['TQQQ_Open'] / df['TQQQ_Close'].shift(1) - 1).fillna(0).astype(float)
+        df['tqqq_high_low'] = (df['TQQQ_High'] - df['TQQQ_Low']) / df['TQQQ_Close']
+        df['tqqq_gap'] = (df['TQQQ_Open'] / df['TQQQ_Close'].shift(1) - 1)
 
-        df['tqqq_price_to_ma5'] = (df['TQQQ_Close'] / df['TQQQ_Close'].rolling(window=5, min_periods=1).mean()).fillna(1.0).astype(float) # Ratio, so 1.0 means no deviation
-        df['tqqq_price_to_ma20'] = (df['TQQQ_Close'] / df['TQQQ_Close'].rolling(window=20, min_periods=1).mean()).fillna(1.0).astype(float)
-        df['tqqq_volume_ratio'] = (df['TQQQ_Volume'] / df['TQQQ_Volume'].rolling(window=20, min_periods=1).mean()).fillna(1.0).astype(float)
-        df['tqqq_momentum_5d'] = df['TQQQ_Close'].pct_change(5).fillna(0).astype(float)
-        df['tqqq_momentum_10d'] = df['TQQQ_Close'].pct_change(10).fillna(0).astype(float)
-        df['tqqq_momentum_20d'] = df['TQQQ_Close'].pct_change(20).fillna(0).astype(float)
-        df['tqqq_volatility'] = df['tqqq_return'].rolling(window=20, min_periods=1).std().fillna(0).astype(float)
-        df['tqqq_volatility_ratio'] = (df['tqqq_volatility'] / df['tqqq_volatility'].rolling(window=60, min_periods=1).mean()).fillna(1.0).astype(float) # Ratio
-        df['tqqq_high_low_ratio'] = (df['tqqq_high_low'] / df['tqqq_high_low'].rolling(window=20, min_periods=1).mean()).fillna(1.0).astype(float) # Ratio
+        df['tqqq_price_to_ma5'] = df['TQQQ_Close'] / df['TQQQ_Close'].rolling(window=5, min_periods=1).mean()
+        df['tqqq_price_to_ma20'] = df['TQQQ_Close'] / df['TQQQ_Close'].rolling(window=20, min_periods=1).mean()
+        df['tqqq_volume_ratio'] = df['TQQQ_Volume'] / df['TQQQ_Volume'].rolling(window=20, min_periods=1).mean()
+        df['tqqq_momentum_5d'] = df['TQQQ_Close'].pct_change(5)
+        df['tqqq_momentum_10d'] = df['TQQQ_Close'].pct_change(10)
+        df['tqqq_momentum_20d'] = df['TQQQ_Close'].pct_change(20)
+        df['tqqq_volatility'] = df['tqqq_return'].rolling(window=20, min_periods=1).std()
+        df['tqqq_volatility_ratio'] = df['tqqq_volatility'] / df['tqqq_volatility'].rolling(window=60, min_periods=1).mean()
+        df['tqqq_high_low_ratio'] = df['tqqq_high_low'] / df['tqqq_high_low'].rolling(window=20, min_periods=1).mean()
 
-        df['vix_change'] = df['VIX_Close'].pct_change().fillna(0).astype(float)
-        df['vix_ma5'] = df['VIX_Close'].rolling(window=5, min_periods=1).mean().fillna(df['VIX_Close'].mean() if not df['VIX_Close'].isnull().all() else 20.0).astype(float) # Use VIX mean or default
-        df['vix_ma20'] = df['VIX_Close'].rolling(window=20, min_periods=1).mean().fillna(df['VIX_Close'].mean() if not df['VIX_Close'].isnull().all() else 20.0).astype(float)
-        df['vix_ratio'] = (df['VIX_Close'] / df['vix_ma20']).fillna(1.0).astype(float)
-        df['vix_term_structure'] = (df['VIX_Close'] - df['vix_ma20']).fillna(0).astype(float)
-        df['vix_momentum_5d'] = df['VIX_Close'].pct_change(5).fillna(0).astype(float)
-        df['vix_momentum_10d'] = df['VIX_Close'].pct_change(10).fillna(0).astype(float)
-        df['vix_volatility'] = df['vix_change'].rolling(window=20, min_periods=1).std().fillna(0).astype(float)
-        df['vix_volatility_ratio'] = (df['vix_volatility'] / df['vix_volatility'].rolling(window=60, min_periods=1).mean()).fillna(1.0).astype(float)
+        df['vix_change'] = df['VIX_Close'].pct_change()
+        df['vix_ma5'] = df['VIX_Close'].rolling(window=5, min_periods=1).mean()
+        df['vix_ma20'] = df['VIX_Close'].rolling(window=20, min_periods=1).mean()
+        df['vix_ratio'] = df['VIX_Close'] / df['vix_ma20']
+        df['vix_term_structure'] = df['VIX_Close'] - df['vix_ma20']
+        df['vix_momentum_5d'] = df['VIX_Close'].pct_change(5)
+        df['vix_momentum_10d'] = df['VIX_Close'].pct_change(10)
+        df['vix_volatility'] = df['vix_change'].rolling(window=20, min_periods=1).std()
+        df['vix_volatility_ratio'] = df['vix_volatility'] / df['vix_volatility'].rolling(window=60, min_periods=1).mean()
 
-        df['tbill_3m'] = (df['IRX_Close'] / 100).fillna(0.01).astype(float) # Default to 1% interest if NaN
-        df['treasury_10y'] = (df['TNX_Close'] / 100).fillna(0.02).astype(float) # Default to 2% interest if NaN
-        df['yield_spread'] = (df['treasury_10y'] - df['tbill_3m']).fillna(0).astype(float)
-        # Handle division by zero for yield_curve_slope
-        df['yield_curve_slope'] = (df['yield_spread'] / df['tbill_3m']).replace([np.inf, -np.inf], 0).fillna(0).astype(float)
-        df['yield_momentum'] = df['treasury_10y'].pct_change(5).fillna(0).astype(float)
+        df['tbill_3m'] = df['IRX_Close'] / 100
+        df['treasury_10y'] = df['TNX_Close'] / 100
+        df['yield_spread'] = df['treasury_10y'] - df['tbill_3m']
+        df['yield_curve_slope'] = df['yield_spread'] / df['tbill_3m']
+        df['yield_momentum'] = df['treasury_10y'].pct_change(5)
 
-        # Ensure 'vix_regime' calculation is robust (already done in previous fix, but re-confirm)
-        vix_for_qcut = df['VIX_Close'].copy()
-        if vix_for_qcut.isnull().all():
-            logger.warning("VIX_Close is all NaNs, using default 20.0 for qcut operation.")
-            vix_for_qcut = vix_for_qcut.fillna(20.0)
+        df['vix_regime'] = pd.qcut(df['VIX_Close'].fillna(df['VIX_Close'].mean()), q=7, labels=[1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3])
+        df['funding_cost_base'] = (df['tbill_3m'] * 2 + df['yield_spread'] * 0.15 + df['vix_momentum_5d'].abs() * 0.08 + df['yield_momentum'].abs() * 0.05) * df['vix_regime'].astype(float)
 
-        qcut_labels = [1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]
-        try:
-            df['vix_regime'] = pd.qcut(vix_for_qcut, q=7, labels=qcut_labels, duplicates='drop')
-            if df['vix_regime'].isnull().all():
-                logger.warning("pd.qcut for vix_regime resulted in all NaNs, filling with default 1.15.")
-                df['vix_regime'] = 1.15
-        except Exception as qcut_e:
-            logger.error(f"Error in pd.qcut for vix_regime: {qcut_e}. Filling with default 1.15.")
-            df['vix_regime'] = 1.15
-
-        df['vix_regime'] = df['vix_regime'].astype(float)
-
-        # Calculate funding costs within a try-except block to ensure total_funding_cost is always present
-        try:
-            df['funding_cost_base'] = (
-                                              df['tbill_3m'] * 2 +
-                                              df['yield_spread'] * 0.15 +
-                                              df['vix_momentum_5d'].abs() * 0.08 +
-                                              df['yield_momentum'].abs() * 0.05
-                                      ) * df['vix_regime']
-            df['funding_cost_base'] = df['funding_cost_base'].fillna(0).astype(float) # Ensure funding_cost_base also handles NaNs and is float
-
-            df['vix_cost_adj'] = (df['VIX_Close'] / 16) * 0.0001 * (
-                    1 + df['vix_term_structure'].abs() +
-                    df['vix_momentum_5d'].abs() +
-                    df['vix_volatility_ratio']
-            )
-            df['vix_cost_adj'] = df['vix_cost_adj'].fillna(0).astype(float) # Ensure vix_cost_adj also handles NaNs and is float
-
-            df['total_funding_cost'] = (df['funding_cost_base'] + df['vix_cost_adj']) / 252.0
-            # Ensure total_funding_cost is float and handle potential NaNs from division
-            df['total_funding_cost'] = df['total_funding_cost'].fillna(0.0001).astype(float)
-
-            if df['total_funding_cost'].isnull().any():
-                initial_nan_count_tfc = df['total_funding_cost'].isnull().sum()
-                logger.warning(f"Total_funding_cost had {initial_nan_count_tfc} NaNs after final calculation, filled with 0.0001.")
-        except Exception as e:
-            logger.error(f"Critical error calculating funding costs. Defaulting 'total_funding_cost' to 0.0001. Error: {e}")
-            df['total_funding_cost'] = 0.0001 # Fallback if any calculation fails
+        df['vix_cost_adj'] = (df['VIX_Close'] / 16) * 0.0001 * (1 + df['vix_term_structure'].abs() + df['vix_momentum_5d'].abs() + df['vix_volatility_ratio'])
+        df['total_funding_cost'] = (df['funding_cost_base'] + df['vix_cost_adj']) / 252
 
         mask = df['qqq_return'] != 0
         df['leverage_ratio'] = np.nan
         df.loc[mask, 'leverage_ratio'] = (df.loc[mask, 'tqqq_return'] + df.loc[mask, 'total_funding_cost']) / df.loc[mask, 'qqq_return']
         df.loc[~mask, 'leverage_ratio'] = 3.0
-        df['leverage_ratio'] = df['leverage_ratio'].clip(2.990, 3.010).astype(float) # Ensure final leverage is float
+        df['leverage_ratio'] = df['leverage_ratio'].clip(2.990, 3.010)
 
         logger.debug("특성 생성 완료")
         return df
     except Exception as e:
         logger.error(f"특성 생성 오류: {e}")
-        # Ensure df has 'total_funding_cost' column even if create_features completely fails
-        if 'total_funding_cost' not in df.columns:
-            df['total_funding_cost'] = 0.0001
-            logger.warning("Added 'total_funding_cost' as 0.0001 due to feature creation error.")
         return df
 
 # 시퀀스 준비
@@ -441,11 +321,11 @@ def analyze():
         # seq_length는 최소 필요일수이며, 주말/공휴일을 고려하여 추가 버퍼를 둡니다.
         data_fetch_buffer_days = seq_length + 10 # 넉넉하게 10일 버퍼 추가
         fetch_start_date_for_data_download = requested_start - pd.Timedelta(days=data_fetch_buffer_days)
-
+        
         # QQQ 상장일보다 이전으로 가지 않도록 함
         if fetch_start_date_for_data_download < QQQ_INCEPTION_DATE:
             fetch_start_date_for_data_download = QQQ_INCEPTION_DATE
-
+        
         fetch_end_date = requested_end + pd.Timedelta(days=1) # 종료일 포함을 위해 +1일
 
         logger.debug(f"데이터 다운로드 기간: {fetch_start_date_for_data_download.date()} ~ {fetch_end_date.date()}")
@@ -461,7 +341,7 @@ def analyze():
             return jsonify({'error': error_msg}), 500
 
         logger.info(f"데이터 다운로드 완료 - 수신된 포인트 수: {len(data)}")
-
+        
         df = pd.DataFrame()
         for ticker in tickers:
             if ticker == "^VIX":
@@ -480,42 +360,11 @@ def analyze():
         df.index.name = 'Date'
         df.index = pd.to_datetime(df.index)
 
-        # 모든 필수 원본 컬럼이 존재하는지 확인하고, 없으면 NaN으로 채움
-        # 이는 yfinance가 특정 기간에 대한 데이터를 제공하지 않을 때 발생할 수 있음
-        expected_raw_cols = [
-                                f'{t}_{c}' for t in ['QQQ', 'TQQQ'] for c in ['Open', 'High', 'Low', 'Close', 'Volume']
-                            ] + ['VIX_Close', 'IRX_Close', 'TNX_Close']
-
-        for col in expected_raw_cols:
-            if col not in df.columns:
-                df[col] = np.nan
-                logger.warning(f"Expected raw column '{col}' not found in downloaded data, filled with NaN.")
-
         if df.empty:
             raise ValueError(f"선택한 기간({requested_start.date()} ~ {requested_end.date()})에 해당하는 데이터가 없습니다.")
 
         logger.info(f"다운로드된 데이터 범위: {df.index[0].date()} ~ {df.index[-1].date()}")
-
-        # VIX, IRX, TNX 데이터의 NaN을 처리합니다. 이들은 total_funding_cost 계산에 필수적입니다.
-        for col in ['VIX_Close', 'IRX_Close', 'TNX_Close']:
-            if col in df.columns:
-                initial_nan_count = df[col].isnull().sum()
-                if initial_nan_count > 0:
-                    df[col] = df[col].ffill().bfill() # 결측치를 이전/이후 값으로 채움
-                    if df[col].isnull().any(): # 여전히 NaN이 남아있는 경우 (예: 모든 값이 NaN인 경우)
-                        default_val = 20.0 if 'VIX' in col else 0.01 # VIX는 20, 금리 데이터는 0.01 (1%)로 기본값 설정
-                        df[col] = df[col].fillna(df[col].mean() if not df[col].isnull().all() else default_val)
-                        if df[col].isnull().any(): # 평균도 NaN인 경우를 대비
-                            df[col] = df[col].fillna(default_val)
-                    if initial_nan_count > 0 and df[col].isnull().sum() == 0:
-                        logger.info(f"'{col}'의 {initial_nan_count}개 NaN 값을 채웠습니다.")
-                    elif df[col].isnull().sum() > 0:
-                        logger.warning(f"'{col}'의 NaN 값을 모두 채우지 못했습니다. {df[col].isnull().sum()}개 남아있습니다.")
-            else:
-                # 이 경우는 expected_raw_cols 검사에서 이미 잡혔어야 하지만, 혹시 모를 상황 대비
-                df[col] = np.nan
-                logger.warning(f"'{col}' 컬럼이 최종 df에 없어 NaN으로 초기화합니다. 이어서 NaN 처리됩니다.")
-
+        
         df = create_features(df)
 
         with open('model_input_features.json', 'r') as f:
@@ -535,7 +384,7 @@ def analyze():
         df_for_prediction = df[(df.index >= prediction_data_start_for_sequence) & (df.index <= requested_end)].copy()
 
         X_seq, prediction_dates, _ = prepare_sequences(df_for_prediction, seq_length)
-
+        
         if X_seq.size == 0 or len(prediction_dates) == 0:
             logger.warning("예측을 위한 시퀀스 데이터가 부족하거나 없습니다. 기본 레버리지 값으로 대체합니다.")
             df['predicted_leverage'] = 3.0
@@ -568,13 +417,13 @@ def analyze():
 
         qqq_cumulative_base = calculate_cumulative_returns(df['qqq_return'], initial_value=1.0)
         actual_tqqq_cumulative_base = calculate_cumulative_returns(df['tqqq_return'], initial_value=1.0)
-
+        
         predicted_daily_returns = (df['qqq_return'] * df['predicted_leverage']).fillna(0) - df['total_funding_cost'].fillna(0)
         predicted_tqqq_cumulative_base = calculate_cumulative_returns(predicted_daily_returns, initial_value=1.0)
 
         # 차트 표시를 위한 날짜 범위 생성 (매일)
         chart_display_dates = pd.date_range(start=requested_start, end=requested_end, freq='D')
-
+        
         qqq_chart_series = qqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
         actual_tqqq_chart_series = actual_tqqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
         predicted_tqqq_chart_series = predicted_tqqq_cumulative_base.reindex(chart_display_dates, method='ffill').fillna(1.0)
@@ -587,7 +436,7 @@ def analyze():
         first_valid_qqq_idx = qqq_chart_series[qqq_chart_series.index >= requested_start].first_valid_index()
         if first_valid_qqq_idx is not None:
             chart_base_date = first_valid_qqq_idx
-
+        
         # 실제 TQQQ 시리즈에서 유효한 첫 번째 인덱스 찾기 (TQQQ 상장일 이후)
         first_valid_actual_tqqq_idx = actual_tqqq_chart_series[(actual_tqqq_chart_series.index >= requested_start) & (actual_tqqq_chart_series.index >= TQQQ_INCEPTION_DATE)].first_valid_index()
         if first_valid_actual_tqqq_idx is not None and (chart_base_date is None or first_valid_actual_tqqq_idx < chart_base_date):
@@ -614,7 +463,7 @@ def analyze():
                 actual_tqqq_output_list.append(None)
             else:
                 actual_tqqq_output_list.append(value)
-
+        
         qqq_output_list = qqq_final_normalized.tolist()
         predicted_tqqq_output_list = predicted_tqqq_final_normalized.tolist()
 
@@ -622,14 +471,6 @@ def analyze():
 
         raw_data_display_df = df[(df.index >= requested_start) & (df.index <= requested_end)].copy()
         raw_data_display_df = raw_data_display_df.reindex(chart_display_dates, method='ffill')
-
-        # Debugging: Check raw_data_display_df before sending
-        logger.info(f"raw_data_display_df columns: {raw_data_display_df.columns.tolist()}")
-        if 'total_funding_cost' in raw_data_display_df.columns:
-            logger.info(f"raw_data_display_df['total_funding_cost'] head:\n{raw_data_display_df['total_funding_cost'].head()}")
-            logger.info(f"raw_data_display_df['total_funding_cost'] NaN count: {raw_data_display_df['total_funding_cost'].isnull().sum()}")
-        else:
-            logger.warning("'total_funding_cost' column NOT found in raw_data_display_df!")
 
         actual_tqqq_prices_list = []
         for dt, value in raw_data_display_df['TQQQ_Close'].items():
@@ -653,8 +494,7 @@ def analyze():
             'predicted_leverage': convert_nan_to_none(raw_data_display_df['predicted_leverage'].tolist()),
             'cumulative_actual': convert_nan_to_none(actual_tqqq_output_list),
             'cumulative_predicted': convert_nan_to_none(predicted_tqqq_output_list),
-            'cumulative_qqq': convert_nan_to_none(qqq_output_list),
-            'total_funding_cost': convert_nan_to_none(raw_data_display_df['total_funding_cost'].tolist())
+            'cumulative_qqq': convert_nan_to_none(qqq_output_list)
         }
 
         logger.info("API 응답 준비 완료")
@@ -674,15 +514,29 @@ def analyze():
         }), 500
 
 if __name__ == '__main__':
-    # 환경 변수로 실행 환경 확인
-    if os.environ.get('DOCKER_CONTAINER'):
-        # Docker 환경
-        host = '0.0.0.0'
-    elif os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
-        # AWS 환경
-        host = '0.0.0.0'
-    else:
-        # 로컬 개발 환경
-        host = '127.0.0.1'
+    # 모델 로드를 실제 Flask 앱 프로세스에서 한 번만 수행하도록 설정
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        try:
+            model, scaler, features, seq_length = load_models()
+            logger.info("모델 로드 완료")
+        except Exception as e:
+            logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+            print("프로그램을 계속 실행할 수 없습니다. 필요한 모델 파일이 있는지 확인해주세요.")
+            model = None
+            scaler = None
+            features = []
+            seq_length = 30
 
-    app.run(debug=True, host=host)
+    # 환경에 따라 호스트 설정
+    if os.environ.get('DOCKER_CONTAINER') or os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+        host = '0.0.0.0'  # Docker 및 AWS 환경용
+    else:
+        host = '127.0.0.1'  # 로컬 개발 환경용
+
+    # 애플리케이션 실행
+    app.run(
+        host=host,
+        port=int(os.environ.get('PORT', 5000)),
+        debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true',
+        use_reloader=False  # 디버그 모드에서도 모델 중복 로드 방지
+    )
