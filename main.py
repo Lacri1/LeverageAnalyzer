@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from flask import Flask, render_template, jsonify, request
 import numpy as np
 import pandas as pd
@@ -60,30 +61,56 @@ class OutputScaling(tf.keras.layers.Layer):
 
 def load_models():
     """Load ML models and return them with status"""
+    global model, scaler, features, seq_length
+    
     try:
         print("\n" + "="*50)
         print("모델 및 스케일러 로딩 시작...")
 
-        # Check if model files exist
-        import os
-        if not os.path.exists('leverage_model.keras'):
-            raise FileNotFoundError("leverage_model.keras 파일을 찾을 수 없습니다.")
-        if not os.path.exists('leverage_scaler.pkl'):
-            raise FileNotFoundError("leverage_scaler.pkl 파일을 찾을 수 없습니다.")
-        if not os.path.exists('model_input_features.json'):
-            raise FileNotFoundError("model_input_features.json 파일을 찾을 수 없습니다.")
+        # Define model file paths
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(base_dir, 'leverage_model.keras')
+        scaler_path = os.path.join(base_dir, 'leverage_scaler.pkl')
+        features_path = os.path.join(base_dir, 'model_input_features.json')
+        
+        print(f"모델 경로: {model_path}")
+        print(f"스케일러 경로: {scaler_path}")
+        print(f"특성 파일 경로: {features_path}")
 
-        # Load models
-        model = load_model('leverage_model.keras', custom_objects={'OutputScaling': OutputScaling})
-        scaler = joblib.load("leverage_scaler.pkl")
+        # Check if files exist
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"{model_path} 파일을 찾을 수 없습니다.")
+        if not os.path.exists(scaler_path):
+            raise FileNotFoundError(f"{scaler_path} 파일을 찾을 수 없습니다.")
+        if not os.path.exists(features_path):
+            raise FileNotFoundError(f"{features_path} 파일을 찾을 수 없습니다.")
 
-        with open("model_input_features.json", "r") as f:
+        # 커스텀 객체 정의
+        custom_objects = {
+            'OutputScaling': OutputScaling
+        }
+        
+        # Load models with custom objects
+        print("\n모델 로드 중...")
+        model = load_model(
+            model_path, 
+            custom_objects=custom_objects,
+            compile=False  # 예측만 할 것이므로 컴파일 생략
+        )
+        print("✅ 모델 로드 성공")
+        
+        print("\n스케일러 로드 중...")
+        scaler = joblib.load(scaler_path)
+        print("✅ 스케일러 로드 성공")
+        
+        print("\n특성 정보 로드 중...")
+        with open(features_path, "r") as f:
             feature_info = json.load(f)
 
-        features = feature_info['features']
-        seq_length = feature_info['seq_length']
+        features = feature_info.get('features', [])
+        seq_length = feature_info.get('seq_length', 30)
 
-        print("모든 모델 및 스케일러가 성공적으로 로드되었습니다.")
+        print("\n모든 모델 및 스케일러가 성공적으로 로드되었습니다.")
         print(f"시퀀스 길이: {seq_length}")
         print(f"특성 개수: {len(features)}")
         print("="*50 + "\n")
@@ -95,7 +122,7 @@ def load_models():
         print(f"에러 유형: {type(e).__name__}")
         print(f"에러 메시지: {str(e)}")
         import traceback
-        print(f"에러 상세 정보:\n{traceback.format_exc()}")
+        traceback.print_exc()
         print("="*50 + "\n")
         raise  # Re-raise the exception to be handled by the caller
 
@@ -104,6 +131,21 @@ model = None
 scaler = None
 features = []
 seq_length = 30
+
+def initialize_models():
+    """모델과 스케일러를 초기화합니다."""
+    global model, scaler, features, seq_length
+    try:
+        logger.info("모델 초기화 시작")
+        model, scaler, features, seq_length = load_models()
+        logger.info("모델 초기화 완료")
+    except Exception as e:
+        error_msg = f"모델 초기화 실패: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+# 애플리케이션 초기화 시점에 모델 초기화
+initialize_models()
 
 # 특성 생성 함수
 def create_features(df):
@@ -514,29 +556,14 @@ def analyze():
         }), 500
 
 if __name__ == '__main__':
-    # 모델 로드를 실제 Flask 앱 프로세스에서 한 번만 수행하도록 설정
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        try:
-            model, scaler, features, seq_length = load_models()
-            logger.info("모델 로드 완료")
-        except Exception as e:
-            logger.error(f"모델 로드 중 오류 발생: {str(e)}")
-            print("프로그램을 계속 실행할 수 없습니다. 필요한 모델 파일이 있는지 확인해주세요.")
-            model = None
-            scaler = None
-            features = []
-            seq_length = 30
+    # 서버 실행 설정
+    host = '0.0.0.0' if os.environ.get('DOCKER_CONTAINER') == 'true' else '127.0.0.1'
+    port = int(os.environ.get('PORT', 5000))
 
-    # 환경에 따라 호스트 설정
-    if os.environ.get('DOCKER_CONTAINER') or os.environ.get('AWS_EXECUTION_ENV') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
-        host = '0.0.0.0'  # Docker 및 AWS 환경용
-    else:
-        host = '127.0.0.1'  # 로컬 개발 환경용
-
-    # 애플리케이션 실행
+    # Flask 개발 서버 실행
     app.run(
         host=host,
-        port=int(os.environ.get('PORT', 5000)),
+        port=port,
         debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true',
-        use_reloader=False  # 디버그 모드에서도 모델 중복 로드 방지
+        use_reloader=not os.environ.get('DOCKER_CONTAINER') == 'true'
     )

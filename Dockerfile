@@ -24,15 +24,21 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir waitress
 
+# Copy model files first (to leverage Docker cache)
+COPY leverage_model.keras leverage_scaler.pkl model_input_features.json ./
+
 # Copy application code
 COPY . .
 
-# Expose port
+# Create a directory for logs
+RUN mkdir -p /app/logs
+
+# 포트 노출
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Command to run the application
-CMD ["waitress-serve", "--port=5000", "--url-scheme=http", "--call", "main:create_app"]
+# 앱 실행
+CMD ["waitress-serve", "--host=0.0.0.0", "--port=5000", "main:app"]
