@@ -50,6 +50,16 @@ body {
     padding: 32px;
 }
 
+a {
+    color: #66d9ef;
+    text-decoration: none;
+}
+
+a:visited {
+    color: #66d9ef;
+}
+
+
 .control-panel {
     background: #f7fafc;
     border: 1px solid #e2e8f0;
