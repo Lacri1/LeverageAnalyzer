@@ -48,7 +48,8 @@ class OutputScaling(tf.keras.layers.Layer):
         self.min_val = min_val
         self.max_val = max_val
 
-    def call(self, inputs):
+    # noinspection PyMethodOverriding
+    def call(self, inputs, training=None):
         return inputs * (self.max_val - self.min_val) + self.min_val
 
     def get_config(self):
@@ -64,7 +65,6 @@ def load_models():
     global model, scaler, features, seq_length
     
     try:
-        print("\n" + "="*50)
         print("모델 및 스케일러 로딩 시작...")
 
         # Define model file paths
@@ -113,7 +113,6 @@ def load_models():
         print("\n모든 모델 및 스케일러가 성공적으로 로드되었습니다.")
         print(f"시퀀스 길이: {seq_length}")
         print(f"특성 개수: {len(features)}")
-        print("="*50 + "\n")
 
         return model, scaler, features, seq_length
 
@@ -123,7 +122,6 @@ def load_models():
         print(f"에러 메시지: {str(e)}")
         import traceback
         traceback.print_exc()
-        print("="*50 + "\n")
         raise  # Re-raise the exception to be handled by the caller
 
 # 전역 변수로 모델, 스케일러, 특성, 시퀀스 길이 선언 (초기값 None)
@@ -320,7 +318,6 @@ def test_endpoint():
 @app.route('/api/analyze', methods=['GET'])
 def analyze():
     try:
-        logger.info("="*50)
         logger.info("API 요청 수신")
         logger.debug(f"요청 파라미터: {request.args}")
         logger.debug(f"요청 헤더: {dict(request.headers)}")

@@ -197,7 +197,11 @@
 
             // 날짜 유효성 검사 (이미 위에서 검사했으므로 여기서는 단순 대입만)
 
-            // 버튼 비활성화 및 로딩 표시
+            // 입력 필드 비활성화 및 로딩 표시
+            startDateInput.disabled = true;
+            endDateInput.disabled = true;
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = '분석 중...';
             analyzeBtn.disabled = true;
             analyzeBtn.innerHTML = '<span class="loading"></span>분석 중';
 
@@ -263,9 +267,13 @@
         } finally {
             // 버튼 상태 복원
             const analyzeBtn = document.getElementById('analyze-btn');
+            const startDateInput = document.getElementById('start-date');
+            const endDateInput = document.getElementById('end-date');
             if (analyzeBtn) {
                 analyzeBtn.disabled = false;
-                analyzeBtn.textContent = '분석하기';
+                analyzeBtn.textContent = '분석 시작';
+                startDateInput.disabled = false;
+                endDateInput.disabled = false;
             }
         }
     }
