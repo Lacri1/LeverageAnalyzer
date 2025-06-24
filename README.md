@@ -14,7 +14,7 @@ It utilizes a deep learning model trained in [LeverageGenerator](https://github.
 - **Backtesting Capability**: Simulate TQQQ performance for periods before its actual inception (February 9, 2010)
 - **Real-time Predictions**: Predict TQQQ leverage ratios using a trained deep learning model
 - **Visualization**: Compare actual TQQQ returns with predicted returns through interactive charts
-- **Responsive Design**: Optimized UI/UX for both desktop and mobile environments
+- **Responsive Design**: Optimized UI/UX for desktop environments
 - **Historical Simulation**: Understand how TQQQ would have performed during major market events before its launch
 
 ## Technology Stack
